@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Barniotte</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#EDF0EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C1310" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Suivi des parties de Barniotte : classement, duels, historique.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Barniotte">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Concept : un tableau de marque de club, sobre, pensé pour une main sur le téléphone.
+   Les chiffres du jeu (scores, pourcentages) prennent la police condensée, tout le reste reste calme. */
+:root {
+  --bg: #EDF0EC;
+  --surface: #FFFFFF;
+  --surface2: #E4EAE5;
+  --ink: #13201A;
+  --muted: #57665E;
+  --line: #D3DCD5;
+  --accent: #1E6B50;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #DAEADF;
+  --gold: #7D5F0C;
+  --gold-soft: #F3EBCD;
+  --danger: #A8381F;
+  --danger-soft: #F7DDD6;
+  --scrim: rgba(10, 20, 15, .5);
+  --shadow: 0 1px 2px rgba(19, 32, 26, .08), 0 10px 28px rgba(19, 32, 26, .10);
+  --c1: #1E6B50; --c2: #BF5418; --c3: #2B60B0; --c4: #8A3FA8; --c5: #B5316A; --c6: #8F7108; --c7: #55626B;
+  --f-display: 'Barlow Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  --f-body: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1310; --surface: #141E19; --surface2: #1B2822; --ink: #E7EFEA; --muted: #93A59B; --line: #26342D;
+    --accent: #5CC49B; --accent-ink: #06150F; --accent-soft: #19382C;
+    --gold: #E2BE5C; --gold-soft: #372D10; --danger: #F1907A; --danger-soft: #3B1C16; --scrim: rgba(0, 0, 0, .62);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .45);
+    --c1: #5CC49B; --c2: #F0985C; --c3: #82ABF0; --c4: #C592DF; --c5: #F08AB2; --c6: #DABA4C; --c7: #9DABB5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1310; --surface: #141E19; --surface2: #1B2822; --ink: #E7EFEA; --muted: #93A59B; --line: #26342D;
+  --accent: #5CC49B; --accent-ink: #06150F; --accent-soft: #19382C;
+  --gold: #E2BE5C; --gold-soft: #372D10; --danger: #F1907A; --danger-soft: #3B1C16; --scrim: rgba(0, 0, 0, .62);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .45);
+  --c1: #5CC49B; --c2: #F0985C; --c3: #82ABF0; --c4: #C592DF; --c5: #F08AB2; --c6: #DABA4C; --c7: #9DABB5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.45 var(--f-body);
+  padding-block: 14px 120px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body.lock { overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app { max-width: 560px; margin: 0 auto; display: grid; gap: 18px; }
+h1, h2, h3, p { margin: 0; }
+
+/* En-tête */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font: 700 30px/1 var(--f-display); letter-spacing: .04em; text-transform: uppercase; }
+.sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.who { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+.who b { font-weight: 600; }
+
+/* Blocs */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.sec-h { font: 600 13px/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.hint { color: var(--muted); font-size: 13px; }
+.hint.err { color: var(--danger); font-weight: 600; }
+.note { background: var(--gold-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.warn { background: var(--danger-soft); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.stack { display: grid; gap: 12px; }
+.row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+
+/* Progression */
+.prog { display: grid; gap: 8px; }
+.prog .row { font-size: 13px; color: var(--muted); }
+.prog .row b { color: var(--ink); font-weight: 600; }
+.bar { height: 8px; border-radius: 99px; background: var(--surface2); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+
+/* Classement */
+.banner { background: var(--accent); color: var(--accent-ink); border-radius: 14px; padding: 14px; }
+.banner b { font: 700 24px/1.1 var(--f-display); letter-spacing: .03em; text-transform: uppercase; display: block; }
+.rk { display: grid; grid-template-columns: 22px minmax(0, 1fr) 30px 30px 50px 44px 42px; gap: 6px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.rk.head { border-top: 0; padding: 0 0 6px; font: 600 12px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.rk .n { font: 700 22px/1 var(--f-display); color: var(--muted); }
+.rk .num { text-align: right; font-variant-numeric: tabular-nums; }
+.rk .big { font: 700 22px/1 var(--f-display); }
+.rk .nm { font-weight: 600; font-size: 16px; display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rk .nm span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.form { display: flex; gap: 3px; margin-top: 5px; }
+.form i { width: 12px; height: 5px; border-radius: 2px; background: var(--ok, var(--accent)); }
+.form i.d { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.tag { font-size: 11px; font-weight: 600; color: var(--gold); background: var(--gold-soft); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+
+/* Graphique */
+.chart svg { width: 100%; height: auto; display: block; }
+.ch-grid { stroke: var(--line); stroke-width: 1; }
+.ch-t { fill: var(--muted); font: 11px var(--f-body); }
+.ch-lbl { font: 600 12px var(--f-body); }
+
+/* Duels */
+.duel { border-top: 1px solid var(--line); padding: 10px 0; }
+.duel:first-of-type { border-top: 0; }
+.duel summary { list-style: none; cursor: pointer; display: grid; gap: 7px; }
+.duel summary::-webkit-details-marker { display: none; }
+.duel .names { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.duel .vs { font-weight: 600; }
+.duel .h2h { font: 700 20px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.duel .meta { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+.duel ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.duel li { display: flex; justify-content: space-between; gap: 10px; }
+.duel li span:last-child { color: var(--muted); }
+
+/* Historique */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 8px 14px; font-size: 14px; min-height: 40px; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.chip:disabled { opacity: .35; cursor: not-allowed; }
+.day { font: 600 13px/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 14px 0 8px; }
+.day span { font-weight: 500; letter-spacing: .06em; }
+.mrow { width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; display: grid; gap: 6px; margin-bottom: 8px; }
+.mline { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.mline .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.mline .p.w { color: var(--ink); font-weight: 700; }
+.mline .p:last-child { text-align: right; }
+.mline .sc { font: 700 24px/1 var(--f-display); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.mrow .sub2 { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+.badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--danger); background: var(--danger-soft); border-radius: 6px; padding: 2px 6px; }
+
+/* Boutons */
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px 16px; font-weight: 600; min-height: 46px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.danger { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btns { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 10px; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; }
+.stepper button { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 22px; line-height: 1; }
+.stepper button:disabled { opacity: .35; }
+.stepper output { min-width: 52px; text-align: center; font: 700 28px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+input[type="text"] { width: 100%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 12px; padding: 11px 12px; font: inherit; min-height: 46px; }
+
+/* Saisie du score */
+.score { display: grid; gap: 14px; }
+.side-name { font-weight: 700; font-size: 17px; margin-bottom: 8px; }
+.nums { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.nums button { min-height: 46px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font: 700 22px/1 var(--f-display); }
+.nums button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ba { display: grid; gap: 4px; font-size: 15px; }
+.ba .was { color: var(--muted); text-decoration: line-through; }
+
+/* Fenêtres */
+.scrim { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: flex-end; justify-content: center; z-index: 50; padding-top: env(safe-area-inset-top, 0px); }
+.sheet { background: var(--bg); width: 100%; max-width: 560px; max-height: 94%; overflow: auto; border-radius: 20px 20px 0 0; display: grid; gap: 16px; align-content: start;
+  padding: 20px max(16px, env(safe-area-inset-left, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+.sheet h2 { font: 700 26px/1.05 var(--f-display); letter-spacing: .03em; text-transform: uppercase; }
+.sheet .lbl { font-weight: 600; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+@media (prefers-reduced-motion: no-preference) { .sheet { animation: up .18s ease-out; } @keyframes up { from { transform: translateY(24px); opacity: .6; } } }
+
+/* Barre d'onglets */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line);
+  padding: 6px max(8px, env(safe-area-inset-left, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-right, 0px)); }
+.tabs { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr 78px 1fr 1fr; align-items: end; }
+.tab { background: none; border: 0; display: grid; justify-items: center; gap: 3px; padding: 6px 2px; font-size: 11.5px; color: var(--muted); min-height: 50px; }
+.tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tab[aria-current="page"] { color: var(--accent); font-weight: 700; }
+.fab { justify-self: center; width: 60px; height: 60px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; margin-top: -26px; box-shadow: var(--shadow); }
+.fab svg { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; }
+
+/* Message */
+.toast { position: fixed; left: 0; right: 0; bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 40; display: flex; justify-content: center; pointer-events: none; padding: 0 16px; }
+.toast div { pointer-events: auto; background: var(--ink); color: var(--bg); border-radius: 12px; padding: 11px 14px; display: flex; gap: 14px; align-items: center; font-size: 14px; box-shadow: var(--shadow); max-width: 520px; }
+.toast button { background: none; border: 0; color: var(--bg); text-decoration: underline; font-weight: 700; padding: 0; }
+
+/* Journal */
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 13.5px; }
+.log li { display: grid; gap: 2px; border-top: 1px solid var(--line); padding-top: 10px; }
+.log li:first-child { border-top: 0; padding-top: 0; }
+.log time { color: var(--muted); font-size: 12px; }
+.plist { display: grid; gap: 8px; }
+.plist .row { border-top: 1px solid var(--line); padding-top: 8px; }
+.plist .row:first-child { border-top: 0; padding-top: 0; }
+
+.rowbtns { display: flex; gap: 8px; align-items: center; }
+.iconbtn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; padding: 0; }
+.iconbtn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chip.del { color: var(--danger); }
+.chip.del:hover { background: var(--danger-soft); }
+
+.netline { justify-self: start; display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 2px 0; margin-top: -8px; color: var(--muted); font-size: 12.5px; text-align: left; }
+.netline .nd { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.netline.ok .nd { background: var(--accent); }
+.netline.sync .nd, .netline.idle .nd, .netline.pending .nd { background: var(--gold); }
+.netline.offline .nd, .netline.error .nd, .netline.locked .nd { background: var(--danger); }
+
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1 class="brand">Barniotte</h1>
+      <p class="sub" id="season-label"></p>
+    </div>
+    <div class="rowbtns">
+      <button type="button" class="iconbtn" id="theme"></button>
+      <button type="button" class="who" id="who"></button>
+    </div>
+  </header>
+  <button type="button" class="netline" id="net"></button>
+  <main id="main"></main>
+</div>
+
+<nav class="tabbar" aria-label="Navigation">
+  <div class="tabs">
+    <button type="button" class="tab" data-tab="classement">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 20h8"/></svg>
+      Classement
+    </button>
+    <button type="button" class="tab" data-tab="duels">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/></svg>
+      Duels
+    </button>
+    <button type="button" class="fab" id="fab" aria-label="Nouveau match">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button type="button" class="tab" data-tab="matchs">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
+      Matchs
+    </button>
+    <button type="button" class="tab" data-tab="saison">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
+      Saison
+    </button>
+  </div>
+</nav>
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script>
+/* Règles du jeu et calculs : aucune dépendance au navigateur. */
+const Core = (() => {
+  const TARGET = 7;
+  const COMBO = "Big barniotte à l'ancienne";
+  const MODS = ["Big barniotte", "À l'ancienne", COMBO, "Figure"];
+  /* Le coup combiné remplace les deux coups séparés, et inversement. */
+  const modsNorm = (sel, opt, on) => { if (!on) return; if (opt === COMBO) { sel.delete(MODS[0]); sel.delete(MODS[1]); } else if (opt === MODS[0] || opt === MODS[1]) sel.delete(COMBO); };
+  const fr = (a, b) => a.localeCompare(b, 'fr');
+  const key = (a, b) => [a, b].sort(fr).join('|');
+  const winner = m => (m.sa === m.sb ? null : (m.sa > m.sb ? m.a : m.b));
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const byTime = (x, y) => (x.ts < y.ts ? -1 : x.ts > y.ts ? 1 : String(x.id).localeCompare(String(y.id), undefined, { numeric: true }));
+
+  /* Renvoie un message d'erreur, ou null si le score est valide. */
+  function checkScore(sa, sb) {
+    if (!Number.isInteger(sa) || !Number.isInteger(sb)) return "Choisis le score des deux joueurs.";
+    if (sa === TARGET && sb === TARGET) return "Pas de match nul : un seul joueur peut avoir 7 points.";
+    if (Math.max(sa, sb) !== TARGET) return "Le vainqueur doit avoir exactement 7 points.";
+    return null;
+  }
+
+  /* Nombre de matchs d'un duo dans la saison (terminés et en cours), pour le quota. */
+  function pairCountAll(state, season, a, b) {
+    const k = key(a, b);
+    return state.matches.filter(m => m.season === season.id && m.status !== 'annule' && key(m.a, m.b) === k).length;
+  }
+
+  /* Plus grand nombre de matchs joués par un duo : le quota ne peut pas descendre en dessous. */
+  function maxPairCount(state, season) {
+    let max = 0;
+    const P = season.players;
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+      max = Math.max(max, pairCountAll(state, season, P[i], P[j]));
+    }
+    return max;
+  }
+
+  /* Classement d'une saison, duos et courbe d'évolution. Seuls les matchs terminés comptent. */
+  function standings(state, season) {
+    const ms = state.matches.filter(m => m.season === season.id && m.status === 'termine').sort(byTime);
+    const P = season.players.slice();
+    const st = {};
+    P.forEach(p => { st[p] = { name: p, J: 0, V: 0, D: 0, pts: 0, enc: 0, form: [], rest: 0 }; });
+    const pr = {};
+    for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) {
+      const [a, b] = [P[i], P[j]].sort(fr);
+      pr[key(a, b)] = { a, b, n: 0, wa: 0, wb: 0, list: [] };
+    }
+    const timeline = {}; P.forEach(p => { timeline[p] = []; });
+    const days = [];
+    let lastDay = null;
+    const snap = day => P.forEach(p => { if (st[p].J > 0) timeline[p].push({ day, pct: st[p].V / st[p].J }); });
+    for (const m of ms) {
+      if (!st[m.a] || !st[m.b]) continue;
+      const day = m.ts.slice(0, 10);
+      if (lastDay && day !== lastDay) { snap(lastDay); days.push(lastDay); }
+      lastDay = day;
+      const w = winner(m), l = w === m.a ? m.b : m.a;
+      st[w].V++; st[l].D++; st[m.a].J++; st[m.b].J++;
+      st[m.a].pts += m.sa; st[m.b].pts += m.sb;
+      st[m.a].enc += m.sb; st[m.b].enc += m.sa;
+      st[w].form.push('V'); st[l].form.push('D');
+      const p = pr[key(m.a, m.b)];
+      p.n++; p.list.push(m);
+      if (w === p.a) p.wa++; else p.wb++;
+    }
+    if (lastDay) { snap(lastDay); days.push(lastDay); }
+
+    const pairs = Object.values(pr);
+    let played = 0;
+    pairs.forEach(p => {
+      const rem = Math.max(0, season.quota - p.n);
+      p.remaining = rem;
+      st[p.a].rest += rem; st[p.b].rest += rem;
+      played += Math.min(p.n, season.quota);
+    });
+    const total = pairs.length * season.quota;
+
+    /* % de victoires, puis total de points marqués ramené au nombre de matchs. */
+    const cmp = (x, y) => {
+      if (x.J === 0 && y.J === 0) return fr(x.name, y.name);
+      if (x.J === 0) return 1;
+      if (y.J === 0) return -1;
+      const d = y.V * x.J - x.V * y.J;
+      if (d !== 0) return d;
+      const q = y.pts * x.J - x.pts * y.J;
+      if (q !== 0) return q;
+      return fr(x.name, y.name);
+    };
+    const rows = Object.values(st).sort(cmp);
+    const same = (x, y) => x.J === y.J && x.V === y.V && x.pts === y.pts;
+    rows.forEach((r, i) => { r.tie = (i > 0 && same(r, rows[i - 1])) || (i < rows.length - 1 && same(r, rows[i + 1])); });
+    const complete = total > 0 && pairs.every(p => p.n >= season.quota);
+    const tiedFirst = rows.length > 1 && same(rows[0], rows[1]);
+    return { rows, pairs, played, total, complete, champion: complete && !tiedFirst ? rows[0] : null, tiedFirst: complete && tiedFirst, timeline, days };
+  }
+
+  return { TARGET, MODS, COMBO, modsNorm, key, winner, checkScore, pairCountAll, maxPairCount, standings, esc, byTime, fr };
+})();
+
+
+(function () {
+  'use strict';
+  const { MODS, COMBO, modsNorm, key, winner, checkScore, pairCountAll, maxPairCount, standings, esc, byTime, fr } = Core;
+  const SEED = {"players":[],"seasons":[],"matches":[],"log":[]};
+  const API = (window.BARNIOTTE && window.BARNIOTTE.api) || '';
+  const KEY = API ? 'barniotte-cache-v1' : 'barniotte-proto-v2', ME_KEY = 'barniotte-proto-me';
+  const TABS = ['classement', 'duels', 'matchs', 'saison'];
+
+  /* ---------- Données ---------- */
+  /* Met à niveau des données déjà enregistrées sur l'appareil. */
+  function migrate(s) {
+    s.players.forEach((p, i) => { if (p.c == null) p.c = i; });
+    s.matches.forEach(m => {
+      const a = m.mods || [];
+      if (a.includes(MODS[0]) && a.includes(MODS[1])) m.mods = a.filter(x => x !== MODS[0] && x !== MODS[1]).concat([COMBO]);
+    });
+    return s;
+  }
+  function fresh() {
+    return migrate({
+      players: SEED.players.map(p => Object.assign({}, p)),
+      seasons: SEED.seasons.map(s => Object.assign({}, s, { players: s.players.slice() })),
+      matches: SEED.matches.map(m => Object.assign({}, m)),
+      log: SEED.log.map(l => Object.assign({}, l)),
+      nextId: SEED.matches.length + 1, nextSeason: 2
+    });
+  }
+  function load() {
+    try { const s = localStorage.getItem(KEY); if (s) return migrate(JSON.parse(s)); } catch (e) { /* stockage indisponible */ }
+    return fresh();
+  }
+  let state = load();
+  let me = null;
+  try { me = localStorage.getItem(ME_KEY); } catch (e) { me = null; }
+  let filter = 'Tous';
+
+  /* Thème : Auto suit l'appareil, Clair et Sombre forcent l'affichage. */
+  const THEME_KEY = 'barniotte-proto-theme';
+  const THEME_NAMES = { auto: 'Auto', light: 'Clair', dark: 'Sombre' };
+  const THEME_KEYS = { Auto: 'auto', Clair: 'light', Sombre: 'dark' };
+  const hostTheme = document.documentElement.getAttribute('data-theme');
+  let theme = 'auto';
+  try { const t = localStorage.getItem(THEME_KEY); if (THEME_NAMES[t]) theme = t; } catch (e) { /* ignoré */ }
+  const isDark = () => theme === 'dark' || (theme === 'auto' && (hostTheme ? hostTheme === 'dark' : !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches)));
+  const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>';
+  const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>';
+  function applyTheme() {
+    const r = document.documentElement;
+    if (theme === 'auto') { if (hostTheme) r.setAttribute('data-theme', hostTheme); else r.removeAttribute('data-theme'); } else r.setAttribute('data-theme', theme);
+    const b = document.getElementById('theme');
+    if (b) { b.innerHTML = isDark() ? SUN : MOON; b.setAttribute('aria-label', isDark() ? 'Passer en mode clair' : 'Passer en mode sombre'); }
+  }
+  function setTheme(t) { theme = t; try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* ignoré */ } applyTheme(); render(); }
+  try { if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme); } catch (e) { /* ignoré */ }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignoré */ } };
+  const setMe = n => { me = n; try { localStorage.setItem(ME_KEY, n); } catch (e) { /* ignoré */ } };
+
+  /* ---------- Utilitaires ---------- */
+  function h(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat(Infinity)) {
+      if (kid == null || kid === false) continue;
+      e.append(kid.nodeType ? kid : document.createTextNode(kid));
+    }
+    return e;
+  }
+  const curSeason = () => state.seasons.find(s => s.status === 'en_cours') || null;
+  const colorOf = n => { const p = state.players.find(x => x.name === n); const i = p && p.c != null ? p.c : 0; return 'var(--c' + ((i % 7) + 1) + ')'; };
+  const nowIso = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
+  const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const fmtShort = iso => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const fmtStamp = iso => fmtShort(iso.slice(0, 10)) + ', ' + iso.slice(11, 16);
+  const pct = (v, j) => (j ? Math.round(100 * v / j) + ' %' : '–');
+  const sc = m => m.sa + '–' + m.sb;
+  const plural = (n, a, b) => n + ' ' + (n > 1 ? b : a);
+  function logEntry(what, matchId) { state.log.unshift({ ts: nowIso(), by: me || '?', match: matchId || null, what }); }
+  function commit() { save(); render(); queue(); }
+
+  /* ---------- Message ---------- */
+  let toastTimer = null;
+  function toast(text, undo) {
+    const box = document.getElementById('toast');
+    clearTimeout(toastTimer);
+    box.replaceChildren(h('div', { role: 'status' }, h('span', {}, text),
+      undo ? h('button', { type: 'button', onclick: () => { undo(); box.replaceChildren(); } }, 'Annuler') : null));
+    toastTimer = setTimeout(() => box.replaceChildren(), undo ? 9000 : 3800);
+  }
+
+  /* ---------- Fenêtres ---------- */
+  let openSh = null;
+  function openSheet(locked) {
+    if (openSh) openSh.close();
+    const scrim = h('div', { class: 'scrim' });
+    const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' });
+    scrim.append(box);
+    const api = {
+      set(...nodes) { box.replaceChildren(...nodes); box.scrollTop = 0; },
+      close() { scrim.remove(); document.body.classList.remove('lock'); if (openSh === api) openSh = null; }
+    };
+    if (!locked) scrim.addEventListener('click', e => { if (e.target === scrim) api.close(); });
+    document.body.append(scrim);
+    document.body.classList.add('lock');
+    openSh = api;
+    return api;
+  }
+
+  function chips(options, o) {
+    const multi = !!o.multi;
+    let sel = new Set(o.selected || []);
+    const wrap = h('div', { class: 'chips', role: multi ? 'group' : 'radiogroup' });
+    const draw = () => wrap.replaceChildren(...options.map(opt => {
+      const on = sel.has(opt);
+      return h('button', {
+        type: 'button', class: 'chip' + (on ? ' on' : ''), disabled: (o.disabled || []).includes(opt), 'aria-pressed': on ? 'true' : 'false',
+        onclick: () => { if (multi) { if (on) sel.delete(opt); else { sel.add(opt); if (o.norm) o.norm(sel, opt, true); } } else sel = new Set([opt]); draw(); if (o.onChange) o.onChange([...sel]); }
+      }, opt);
+    }));
+    draw();
+    return wrap;
+  }
+
+  /* Sélecteur de score : deux rangées de boutons 0 à 7. */
+  function scorePicker(a, b, init, onChange) {
+    let sa = init ? init[0] : null, sb = init ? init[1] : null;
+    const msg = h('p', { class: 'hint', 'aria-live': 'polite' });
+    const box = h('div', { class: 'score' });
+    const side = (name, which) => h('div', {},
+      h('div', { class: 'side-name' }, name),
+      h('div', { class: 'nums' }, [0, 1, 2, 3, 4, 5, 6, 7].map(n => {
+        const on = (which === 'a' ? sa : sb) === n;
+        return h('button', { type: 'button', class: on ? 'on' : '', 'aria-pressed': on ? 'true' : 'false', 'aria-label': name + ' ' + n,
+          onclick: () => { if (which === 'a') sa = n; else sb = n; draw(); } }, String(n));
+      })));
+    function draw() {
+      box.replaceChildren(side(a, 'a'), side(b, 'b'));
+      const ready = sa != null && sb != null;
+      const err = ready ? checkScore(sa, sb) : 'Choisis le score des deux joueurs.';
+      msg.className = 'hint' + (ready && err ? ' err' : '');
+      msg.textContent = err || 'Victoire de ' + (sa > sb ? a : b) + ', ' + Math.max(sa, sb) + '–' + Math.min(sa, sb) + '.';
+      onChange(sa, sb, !err);
+    }
+    draw();
+    return h('div', { class: 'stack' }, box, msg);
+  }
+
+  /* ---------- Flux : nouveau match ---------- */
+  function startMatch() {
+    const s = curSeason();
+    if (!s) { toast('Aucune saison ouverte. Ouvre-en une dans l’onglet Saison.'); return; }
+    const sh = openSheet();
+    let A = null, B = null;
+    const draw = () => {
+      let info = null, blocked = false;
+      if (A && B) {
+        const n = pairCountAll(state, s, A, B);
+        blocked = n >= s.quota;
+        info = blocked
+          ? h('p', { class: 'warn' }, A + ' et ' + B + ' ont déjà joué leurs ' + s.quota + ' matchs de la saison. Un match de plus ne serait pas noté.')
+          : h('p', { class: 'hint' }, A + ' – ' + B + ' : ' + n + '/' + s.quota + ' joués, ' + plural(s.quota - n, 'restant', 'restants') + '.');
+      }
+      sh.set(
+        h('h2', {}, 'Nouveau match'),
+        h('div', {}, h('div', { class: 'lbl' }, 'Joueur 1'), chips(s.players, { selected: A ? [A] : [], disabled: B ? [B] : [], onChange: v => { A = v[0]; draw(); } })),
+        h('div', {}, h('div', { class: 'lbl' }, 'Joueur 2'), chips(s.players, { selected: B ? [B] : [], disabled: A ? [A] : [], onChange: v => { B = v[0]; draw(); } })),
+        info,
+        h('div', { class: 'btns' },
+          h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+          h('button', { type: 'button', class: 'btn primary', disabled: !(A && B) || blocked, onclick: () => {
+            const m = { id: uid(), season: s.id, ts: nowIso(), a: A, b: B, sa: null, sb: null, status: 'en_cours', mods: [], by: me || '?' };
+            state.matches.push(m); commit(); scoreStep(m, sh);
+          } }, 'Démarrer le match')));
+    };
+    draw();
+  }
+
+  function scoreStep(m, sh) {
+    let vals = [null, null], ok = false;
+    const go = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: () => modsStep(m, vals[0], vals[1], sh) }, 'Valider le score');
+    const picker = scorePicker(m.a, m.b, null, (a, b, valid) => { vals = [a, b]; ok = valid; go.disabled = !valid; });
+    sh.set(
+      h('h2', {}, m.a + ' vs ' + m.b),
+      h('p', { class: 'hint' }, 'Match démarré le ' + fmtStamp(m.ts) + '. Premier à 7 points.'),
+      picker,
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { sh.close(); toast('Match laissé en cours. Il te sera reproposé à la prochaine ouverture.'); } }, 'Plus tard'),
+        go));
+  }
+
+  function modsStep(m, sa, sb, sh) {
+    const w = sa > sb ? m.a : m.b;
+    let sel = [];
+    sh.set(
+      h('h2', {}, w + ' gagne ' + Math.max(sa, sb) + '–' + Math.min(sa, sb)),
+      h('div', {}, h('div', { class: 'lbl' }, 'Coup spécial de ' + w + ' (facultatif)'),
+        chips(MODS, { multi: true, selected: [], norm: modsNorm, onChange: v => { sel = v; } })),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => scoreStep(m, sh) }, 'Retour'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => {
+          m.sa = sa; m.sb = sb; m.mods = sel; m.status = 'termine';
+          commit(); sh.close(); toast(m.a + ' ' + sc(m) + ' ' + m.b + ' enregistré.');
+        } }, 'Terminer le match')));
+  }
+
+  /* ---------- Flux : modifier un match ---------- */
+  function editMatch(m) {
+    if (m.status === 'en_cours') { const sh = openSheet(); scoreStep(m, sh); return; }
+    const sh = openSheet();
+    let vals = [m.sa, m.sb], valid = true, sel = m.mods.slice();
+    const sameMods = () => sel.length === m.mods.length && sel.every(x => m.mods.includes(x));
+    const changedScore = () => vals[0] !== m.sa || vals[1] !== m.sb;
+    const save1 = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: onSave }, 'Enregistrer');
+    const refresh = () => { save1.disabled = !valid || (!changedScore() && sameMods()); };
+    function onSave() {
+      if (!changedScore()) { applyEdit(); return; }
+      const w = vals[0] > vals[1] ? m.a : m.b;
+      sh.set(
+        h('h2', {}, 'Confirmer la modification'),
+        h('p', { class: 'warn' }, 'Ce match est terminé. Le classement va changer. Ta modification sera inscrite dans le journal.'),
+        h('div', { class: 'card ba' },
+          h('div', { class: 'was' }, m.a + ' ' + sc(m) + ' ' + m.b),
+          h('div', {}, h('b', {}, m.a + ' ' + vals[0] + '–' + vals[1] + ' ' + m.b), ' (victoire de ' + w + ')')),
+        h('div', { class: 'btns' },
+          h('button', { type: 'button', class: 'btn ghost', onclick: () => editMatch(m) }, 'Retour'),
+          h('button', { type: 'button', class: 'btn primary', onclick: applyEdit }, 'Confirmer')));
+    }
+    function applyEdit() {
+      const parts = [];
+      if (changedScore()) parts.push('score ' + m.sa + '–' + m.sb + ' → ' + vals[0] + '–' + vals[1]);
+      if (!sameMods()) parts.push('coups spéciaux : ' + (m.mods.join(', ') || 'aucun') + ' → ' + (sel.join(', ') || 'aucun'));
+      logEntry(m.a + ' vs ' + m.b + ' du ' + fmtShort(m.ts.slice(0, 10)) + ' : ' + parts.join(' ; '), m.id);
+      m.sa = vals[0]; m.sb = vals[1]; m.mods = sel.slice();
+      commit(); sh.close(); toast('Modification enregistrée.');
+    }
+    sh.set(
+      h('h2', {}, m.a + ' vs ' + m.b),
+      h('p', { class: 'hint' }, 'Match du ' + fmtDay(m.ts.slice(0, 10)) + '. Saisi par ' + m.by + '.'),
+      scorePicker(m.a, m.b, [m.sa, m.sb], (a, b, ok) => { vals = [a, b]; valid = ok; refresh(); }),
+      h('div', {}, h('div', { class: 'lbl' }, 'Coups spéciaux du vainqueur'),
+        chips(MODS, { multi: true, selected: sel, norm: modsNorm, onChange: v => { sel = v; refresh(); } })),
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Fermer'), save1));
+    refresh();
+  }
+
+  /* ---------- Match non terminé à l'ouverture ---------- */
+  function checkPending() {
+    if (!me) return;
+    const m = state.matches.find(x => x.status === 'en_cours' && x.by === me);
+    if (!m) return;
+    const sh = openSheet(true);
+    sh.set(
+      h('h2', {}, 'Match non terminé'),
+      h('p', {}, m.a + ' vs ' + m.b + ', démarré le ' + fmtStamp(m.ts) + '.'),
+      h('p', {}, 'Voulez-vous le finir ?'),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn danger', onclick: () => {
+          m.status = 'annule'; logEntry('Match non terminé annulé : ' + m.a + ' vs ' + m.b + ' (démarré le ' + fmtStamp(m.ts) + ')', m.id);
+          commit(); sh.close();
+          toast('Match supprimé.', () => { m.status = 'en_cours'; logEntry('Suppression annulée : ' + m.a + ' vs ' + m.b, m.id); commit(); });
+        } }, 'Non'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => scoreStep(m, sh) }, 'Oui')));
+  }
+
+  function askWho() {
+    const sh = openSheet(true);
+    sh.set(
+      h('h2', {}, 'Qui es-tu ?'),
+      h('p', { class: 'hint' }, 'Ton nom sert à retrouver qui a saisi ou modifié un match. Il n’y a pas de mot de passe : tout repose sur la confiance, comme à la table.'),
+      chips(state.players.filter(p => p.active).map(p => p.name), { onChange: v => { setMe(v[0]); sh.close(); render(); checkPending(); } }));
+  }
+
+  /* ---------- Onglet Classement ---------- */
+  function chartSVG(S) {
+    const days = S.days;
+    if (days.length < 2) return null;
+    const W = 360, H = 210, L = 36, R = 62, T = 10, B = 26;
+    const x = i => L + (W - L - R) * (i / (days.length - 1));
+    const y = p => T + (H - T - B) * (1 - p);
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Évolution du pourcentage de victoires cumulé de chaque joueur">';
+    [0, .25, .5, .75, 1].forEach(g => {
+      svg += '<line class="ch-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g) + '" y2="' + y(g) + '"/>';
+      svg += '<text class="ch-t" x="' + (L - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end">' + Math.round(g * 100) + ' %</text>';
+    });
+    const ends = [];
+    Object.keys(S.timeline).forEach(p => {
+      const pts = S.timeline[p];
+      if (!pts.length) return;
+      const d = pts.map(q => x(days.indexOf(q.day)).toFixed(1) + ',' + y(q.pct).toFixed(1)).join(' ');
+      const col = colorOf(p), last = pts[pts.length - 1];
+      svg += '<polyline fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="' + d + '"/>';
+      svg += '<circle cx="' + x(days.indexOf(last.day)).toFixed(1) + '" cy="' + y(last.pct).toFixed(1) + '" r="3.5" fill="' + col + '"/>';
+      ends.push({ p, col, y: y(last.pct) });
+    });
+    ends.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+    ends.forEach(e => { svg += '<text class="ch-lbl" x="' + (W - R + 8) + '" y="' + (e.y + 4) + '" fill="' + e.col + '">' + esc(e.p) + '</text>'; });
+    svg += '<text class="ch-t" x="' + L + '" y="' + (H - 6) + '">' + fmtShort(days[0]) + '</text>';
+    svg += '<text class="ch-t" x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + fmtShort(days[days.length - 1]) + '</text>';
+    return svg + '</svg>';
+  }
+
+  function viewClassement() {
+    const s = curSeason();
+    if (!s) {
+      const last = state.seasons.filter(x => x.status === 'archivee').slice(-1)[0];
+      return h('div', { class: 'stack' }, h('div', { class: 'card stack' },
+        h('h2', { class: 'sec-h' }, 'Pas de saison ouverte'),
+        last ? h('p', {}, last.name + ' est archivée.') : null,
+        h('p', { class: 'hint' }, 'Ouvre une nouvelle saison pour enregistrer des matchs.'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => { location.hash = 'saison'; } }, 'Ouvrir une saison')));
+    }
+    const S = standings(state, s);
+    const out = h('div', { class: 'stack' });
+    if (S.complete) {
+      out.append(h('div', { class: 'banner' },
+        S.champion ? h('b', {}, 'Vainqueur : ' + S.champion.name) : h('b', {}, 'Égalité en tête'),
+        h('span', {}, S.champion ? 'Tous les matchs de la saison sont joués.' : S.rows.filter(r => r.tie).map(r => r.name).join(', ') + ' sont à égalité parfaite (victoires et points). Départage en 3 matchs.')));
+    }
+    out.append(h('div', { class: 'card prog' },
+      h('div', { class: 'row' }, h('span', {}, h('b', {}, S.played + ' / ' + S.total), ' matchs de saison joués'), h('span', {}, s.quota + ' par duo')),
+      h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(S.total), 'aria-valuenow': String(S.played) }, h('i', { style: 'width:' + (S.total ? Math.round(100 * S.played / S.total) : 0) + '%' }))));
+
+    const card = h('div', { class: 'card' },
+      h('div', { class: 'rk head' }, h('span', {}), h('span', {}, 'Joueur'), h('span', { class: 'num' }, 'J'), h('span', { class: 'num' }, 'V'), h('span', { class: 'num' }, '%'), h('span', { class: 'num' }, 'Pts'), h('span', { class: 'num' }, 'Rest.')));
+    S.rows.forEach((r, i) => {
+      card.append(h('div', { class: 'rk' },
+        h('span', { class: 'n' }, String(i + 1)),
+        h('div', { style: 'min-width:0' },
+          h('div', { class: 'nm' }, h('i', { class: 'dot', style: 'background:' + colorOf(r.name) }), h('span', { class: 't' }, r.name), S.complete && r.tie ? h('span', { class: 'tag' }, 'ex æquo') : null),
+          h('div', { class: 'form', 'aria-label': 'Derniers résultats' }, r.form.slice(-5).map(f => h('i', { class: f === 'V' ? '' : 'd' })))),
+        h('span', { class: 'num' }, String(r.J)), h('span', { class: 'num' }, String(r.V)),
+        h('span', { class: 'num big' }, pct(r.V, r.J)), h('span', { class: 'num' }, String(r.pts)), h('span', { class: 'num' }, String(r.rest))));
+    });
+    card.append(h('p', { class: 'hint', style: 'margin-top:10px' },
+      S.complete
+        ? 'Classement final : victoires, puis total de points marqués.'
+        : 'Classement provisoire, trié au % de victoires car tout le monde n’a pas joué autant. Égalité : total de points marqués. J matchs joués, V victoires, Pts points marqués, Rest. matchs restants.'));
+    out.append(card);
+    const svg = chartSVG(S);
+    if (svg) { const c = h('div', { class: 'card chart' }, h('h2', { class: 'sec-h' }, '% de victoires au fil des jours de jeu')); c.insertAdjacentHTML('beforeend', svg); out.append(c); }
+    return out;
+  }
+
+  /* ---------- Onglet Duels ---------- */
+  function viewDuels() {
+    const s = curSeason();
+    if (!s) return h('div', { class: 'card' }, h('p', { class: 'hint' }, 'Aucune saison ouverte.'));
+    const S = standings(state, s);
+    const card = h('div', { class: 'card' }, h('h2', { class: 'sec-h' }, 'Matchs joués par duo'));
+    S.pairs.slice().sort((x, y) => y.remaining - x.remaining || fr(x.a, y.a)).forEach(p => {
+      card.append(h('details', { class: 'duel' },
+        h('summary', {},
+          h('div', { class: 'names' }, h('span', { class: 'vs' }, p.a + ' vs ' + p.b), h('span', { class: 'h2h' }, p.wa + ' – ' + p.wb)),
+          h('div', { class: 'bar' }, h('i', { style: 'width:' + Math.min(100, Math.round(100 * p.n / s.quota)) + '%' })),
+          h('div', { class: 'meta' }, h('span', {}, p.n + ' / ' + s.quota + ' matchs'), h('span', {}, p.remaining ? plural(p.remaining, 'restant', 'restants') : 'Terminé'))),
+        h('ul', {}, p.list.slice().sort((x, y) => byTime(y, x)).map(m => h('li', {}, h('span', {}, m.a + ' ' + sc(m) + ' ' + m.b), h('span', {}, fmtShort(m.ts.slice(0, 10))))))));
+    });
+    return card;
+  }
+
+  /* ---------- Onglet Matchs ---------- */
+  function viewMatchs() {
+    const s = curSeason();
+    const out = h('div', { class: 'stack' });
+    const names = ['Tous'].concat(s ? s.players : []);
+    out.append(chips(names, { selected: [filter], onChange: v => { filter = v[0]; render(); } }));
+    const list = state.matches.filter(m => m.status !== 'annule' && (!s || m.season === s.id) && (filter === 'Tous' || m.a === filter || m.b === filter))
+      .sort((x, y) => byTime(y, x));
+    if (!list.length) { out.append(h('p', { class: 'hint' }, 'Aucun match.')); return out; }
+    let day = null, grp = null, count = 0;
+    const flush = () => { if (grp) { grp.head.append(h('span', {}, ' · ' + plural(count, 'match', 'matchs'))); } };
+    list.forEach(m => {
+      const d = m.ts.slice(0, 10);
+      if (d !== day) { flush(); day = d; count = 0; grp = { head: h('div', { class: 'day' }, fmtDay(d)) }; out.append(grp.head); }
+      count++;
+      const w = m.status === 'termine' ? winner(m) : null;
+      out.append(h('button', { type: 'button', class: 'mrow', onclick: () => editMatch(m), 'aria-label': 'Ouvrir le match ' + m.a + ' contre ' + m.b },
+        h('div', { class: 'mline' },
+          h('span', { class: 'p' + (w === m.a ? ' w' : '') }, m.a),
+          h('span', { class: 'sc' }, m.status === 'termine' ? sc(m) : '– –'),
+          h('span', { class: 'p' + (w === m.b ? ' w' : '') }, m.b)),
+        h('div', { class: 'sub2' },
+          m.status === 'en_cours' ? h('span', { class: 'badge' }, 'En cours') : null,
+          m.mods.map(x => h('span', { class: 'tag' }, x)),
+          m.by !== 'Import' ? h('span', {}, 'saisi par ' + m.by + ' à ' + m.ts.slice(11, 16)) : null)));
+    });
+    flush();
+    return out;
+  }
+
+  /* ---------- Onglet Saison ---------- */
+  function closeSeason(s) {
+    const S = standings(state, s);
+    const sh = openSheet();
+    const left = S.total - S.played;
+    sh.set(
+      h('h2', {}, 'Clôturer ' + s.name),
+      S.complete
+        ? h('p', {}, S.champion ? 'Tous les matchs sont joués. Le vainqueur est ' + S.champion.name + '.' : 'Tous les matchs sont joués, avec une égalité parfaite en tête : il faut un départage avant de clôturer.')
+        : h('p', { class: 'warn' }, 'Il reste ' + plural(left, 'match', 'matchs') + ' à jouer. Le classement ne sera pas définitif.'),
+      h('p', { class: 'hint' }, 'La saison passe en archive avec tous ses matchs. Rien n’est supprimé.'),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => {
+          s.status = 'archivee'; s.end = nowIso().slice(0, 10);
+          state.matches.forEach(m => { if (m.season === s.id && m.status === 'en_cours') m.status = 'annule'; });
+          logEntry(s.name + ' clôturée', null); commit(); sh.close(); toast(s.name + ' archivée.'); location.hash = 'classement';
+        } }, S.complete ? 'Clôturer la saison' : 'Clôturer quand même')));
+  }
+
+  function newSeasonForm() {
+    const act = state.players.filter(p => p.active).map(p => p.name);
+    let picked = act.slice(), quota = 10, name = 'Saison ' + nextSeasonId();
+    const box = h('div', { class: 'card stack' });
+    const draw = () => {
+      const nameIn = h('input', { type: 'text', id: 'ns-name', value: name, 'aria-label': 'Nom de la saison' });
+      nameIn.addEventListener('input', () => { name = nameIn.value; });
+      box.replaceChildren(
+        h('h2', { class: 'sec-h' }, 'Nouvelle saison'),
+        h('div', {}, h('div', { class: 'lbl hint' }, 'Nom'), nameIn),
+        h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs classés (une fois la saison lancée, plus d’ajout)'),
+          chips(act, { multi: true, selected: picked, onChange: v => { picked = v; draw(); } })),
+        h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
+          h('div', { class: 'stepper' },
+            h('button', { type: 'button', 'aria-label': 'Moins', disabled: quota <= 1, onclick: () => { quota--; draw(); } }, '−'), h('output', {}, String(quota)),
+            h('button', { type: 'button', 'aria-label': 'Plus', disabled: quota >= 40, onclick: () => { quota++; draw(); } }, '+'))),
+        picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.'),
+        h('button', { type: 'button', class: 'btn primary', disabled: picked.length < 2 || !name.trim(), onclick: () => {
+          const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'en_cours', quota, players: picked.slice().sort(fr) };
+          state.seasons.push(s); logEntry(s.name + ' ouverte : ' + s.players.join(', ') + ', ' + quota + ' matchs par duo', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
+        } }, 'Ouvrir la saison'));
+    };
+    draw();
+    return box;
+  }
+
+  function deletePlayer(p) {
+    const s = curSeason();
+    const n = state.matches.filter(m => m.a === p.name || m.b === p.name).length;
+    const sh = openSheet();
+    const close = h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Fermer');
+    if (s && s.players.includes(p.name)) {
+      sh.set(h('h2', {}, 'Supprimer ' + p.name),
+        h('p', {}, p.name + ' joue la saison en cours : il apparaît au classement. Tu pourras le supprimer après la clôture de la saison, s\u2019il n\u2019a aucun match enregistré.'), close);
+    } else if (n > 0) {
+      sh.set(h('h2', {}, 'Supprimer ' + p.name),
+        h('p', {}, p.name + ' a ' + plural(n, 'match', 'matchs') + ' dans l\u2019historique. Les supprimer fausserait les classements des saisons archivées.'),
+        h('p', { class: 'hint' }, 'Passe-le plutôt en inactif : il disparaît des choix pour les prochaines saisons et son historique reste intact.'),
+        h('div', { class: 'btns' }, close, p.active ? h('button', { type: 'button', class: 'btn primary', onclick: () => { p.active = false; commit(); sh.close(); toast(p.name + ' est inactif.'); } }, 'Passer inactif') : null));
+    } else {
+      sh.set(h('h2', {}, 'Supprimer ' + p.name),
+        h('p', {}, p.name + ' n\u2019a joué aucun match. Le supprimer de la liste ?'),
+        h('div', { class: 'btns' },
+          h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+          h('button', { type: 'button', class: 'btn danger', onclick: () => {
+            state.players = state.players.filter(x => x !== p);
+            state.seasons.forEach(x => { x.players = x.players.filter(y => y !== p.name); });
+            logEntry('Joueur supprimé : ' + p.name, null);
+            const wasMe = me === p.name;
+            if (wasMe) { me = null; try { localStorage.removeItem(ME_KEY); } catch (e) { /* ignoré */ } }
+            commit(); sh.close(); toast(p.name + ' supprimé.'); if (wasMe) askWho();
+          } }, 'Supprimer')));
+    }
+  }
+
+  function viewSaison() {
+    const s = curSeason();
+    const out = h('div', { class: 'stack' });
+    if (!API) out.append(h('p', { class: 'note' }, 'Prototype : les données restent sur cet appareil. La synchronisation avec Google Sheets viendra ensuite.'));
+
+    out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Affichage'),
+      chips(['Auto', 'Clair', 'Sombre'], { selected: [THEME_NAMES[theme]], onChange: v => setTheme(THEME_KEYS[v[0]]) }),
+      h('p', { class: 'hint' }, 'Auto suit le réglage de ton téléphone. Clair ou Sombre force l\u2019affichage.')));
+
+    out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Mon identité'),
+      chips(state.players.filter(p => p.active).map(p => p.name), { selected: me ? [me] : [], onChange: v => { setMe(v[0]); render(); } })));
+
+    if (s) {
+      const S = standings(state, s);
+      const floor = maxPairCount(state, s);
+      const setQuota = q => { logEntry('Matchs par duo : ' + s.quota + ' → ' + q, null); s.quota = q; commit(); };
+      out.append(h('div', { class: 'card stack' },
+        h('h2', { class: 'sec-h' }, s.name + ' · depuis le ' + fmtShort(s.start)),
+        h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
+          h('div', { class: 'stepper' },
+            h('button', { type: 'button', 'aria-label': 'Moins', disabled: s.quota <= Math.max(1, floor), onclick: () => setQuota(s.quota - 1) }, '−'),
+            h('output', {}, String(s.quota)),
+            h('button', { type: 'button', 'aria-label': 'Plus', disabled: s.quota >= 40, onclick: () => setQuota(s.quota + 1) }, '+'))),
+        h('p', { class: 'hint' }, floor > 0 ? 'Le quota ne peut pas passer sous ' + floor + ', nombre de matchs déjà joués par le duo le plus actif.' : 'Modifiable tant qu’aucun match n’est enregistré.'),
+        h('p', { class: 'hint' }, S.played + ' / ' + S.total + ' matchs joués. Joueurs : ' + s.players.join(', ') + '.'),
+        h('button', { type: 'button', class: 'btn', onclick: () => closeSeason(s) }, 'Clôturer la saison')));
+    } else out.append(newSeasonForm());
+
+    const pl = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Joueurs'),
+      h('p', { class: 'hint' }, 'Un joueur ajouté joue à partir de la saison suivante, jamais en cours de saison.'));
+    const list = h('div', { class: 'plist' });
+    state.players.forEach(p => {
+      const inSeason = s && s.players.includes(p.name);
+      list.append(h('div', { class: 'row' },
+        h('span', {}, h('i', { class: 'dot', style: 'display:inline-block;background:' + colorOf(p.name) + ';margin-right:8px' }), p.name, inSeason ? h('span', { class: 'hint' }, ' · saison en cours') : null),
+        h('div', { class: 'rowbtns' },
+          h('button', { type: 'button', class: 'chip' + (p.active ? ' on' : ''), 'aria-pressed': p.active ? 'true' : 'false', onclick: () => { p.active = !p.active; commit(); } }, p.active ? 'Actif' : 'Inactif'),
+          h('button', { type: 'button', class: 'chip del', 'aria-label': 'Supprimer ' + p.name, onclick: () => deletePlayer(p) }, 'Supprimer'))));
+    });
+    const input = h('input', { type: 'text', id: 'new-player', placeholder: 'Nom du nouveau joueur', 'aria-label': 'Nom du nouveau joueur' });
+    const add = () => {
+      const n = input.value.trim();
+      if (!n) return;
+      if (state.players.some(p => p.name.toLowerCase() === n.toLowerCase())) { toast(n + ' existe déjà.'); return; }
+      state.players.push({ name: n, active: true, c: Math.max(-1, ...state.players.map(q => (q.c == null ? -1 : q.c))) + 1 }); logEntry('Joueur ajouté : ' + n, null); commit(); toast(n + ' ajouté à la liste.');
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
+    pl.append(list, h('div', { class: 'row' }, h('div', { class: 'grow' }, input), h('button', { type: 'button', class: 'btn', onclick: add }, 'Ajouter')));
+    out.append(pl);
+
+    if (API && code) {
+      const linkBox = h('div');
+      out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Connexion au Google Sheet'),
+        h('p', { class: 'hint' }, 'Les matchs sont enregistrés dans le Sheet et partagés entre tous les téléphones connectés.'),
+        h('div', { class: 'btns' },
+          h('button', { type: 'button', class: 'btn', onclick: () => { syncNow(true); toast('Synchronisation lancée.'); } }, 'Synchroniser'),
+          h('button', { type: 'button', class: 'btn', onclick: () => {
+            const link = inviteLink();
+            const fallback = () => { const i = h('input', { type: 'text', readonly: true, value: link, 'aria-label': 'Lien d’invitation' }); linkBox.replaceChildren(i); i.focus(); i.select(); };
+            try { navigator.clipboard.writeText(link).then(() => toast('Lien d’invitation copié.'), fallback); } catch (e) { fallback(); }
+          } }, 'Copier le lien d’invitation')),
+        linkBox,
+        h('p', { class: 'hint' }, 'Le lien contient le code d’accès : ne l’envoie qu’aux joueurs.'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { code = ''; try { localStorage.removeItem(CODE_KEY); } catch (e) { /* ignoré */ } net.state = 'locked'; paintNet(); askCode(); } }, 'Changer de code')));
+    }
+
+    const arch = state.seasons.filter(x => x.status === 'archivee');
+    if (arch.length) {
+      const ac = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Saisons archivées'));
+      arch.slice().reverse().forEach(a => {
+        const S = standings(state, a);
+        ac.append(h('details', {}, h('summary', {}, a.name + ' · ' + fmtShort(a.start) + ' → ' + fmtShort(a.end) + (S.rows[0] && S.rows[0].J ? ' · 1er ' + S.rows[0].name : '')),
+          h('div', { class: 'plist', style: 'margin-top:8px' }, S.rows.map((r, i) => h('div', { class: 'row' }, h('span', {}, (i + 1) + '. ' + r.name), h('span', { class: 'hint' }, r.V + ' V sur ' + r.J))))));
+      });
+      out.append(ac);
+    }
+
+    const lg = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Journal des modifications'));
+    const ul = h('ul', { class: 'log' });
+    state.log.slice(0, 40).forEach(e => ul.append(h('li', {}, h('time', {}, fmtStamp(e.ts) + ' · ' + e.by), h('span', {}, e.what))));
+    lg.append(state.log.length ? ul : h('p', { class: 'hint' }, 'Aucune modification pour le moment.'));
+    out.append(lg);
+
+    if (!API) out.append(h('button', { type: 'button', class: 'btn ghost', onclick: () => {
+      const sh = openSheet();
+      sh.set(h('h2', {}, 'Réinitialiser la démo'), h('p', {}, 'Les données de cet appareil reviennent à l’import de ta fiche (73 matchs). Tes saisies de test seront perdues.'),
+        h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+          h('button', { type: 'button', class: 'btn danger', onclick: () => { state = fresh(); filter = 'Tous'; save(); sh.close(); render(); toast('Données de démo rétablies.'); } }, 'Réinitialiser')));
+    } }, 'Réinitialiser les données de démo'));
+    return out;
+  }
+
+
+  /* ---------- Synchronisation avec le Google Sheet ---------- */
+  const CODE_KEY = 'barniotte-code', OUT_KEY = 'barniotte-outbox';
+  let code = '';
+  try { code = localStorage.getItem(CODE_KEY) || ''; } catch (e) { code = ''; }
+  let outbox = [];
+  try { outbox = JSON.parse(localStorage.getItem(OUT_KEY) || '[]'); } catch (e) { outbox = []; }
+  const net = { state: API ? (code ? 'idle' : 'locked') : 'local', rev: null, busy: false, again: false, loaded: false, tick: 0, at: '', error: '', polling: false };
+  let snap = null;
+  const saveOutbox = () => { try { localStorage.setItem(OUT_KEY, JSON.stringify(outbox)); } catch (e) { /* ignoré */ } };
+  const uid = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const nextSeasonId = () => state.seasons.reduce((n, s) => Math.max(n, Number(s.id) || 0), 0) + 1;
+
+  const pickMatch = m => ({ id: String(m.id), season: Number(m.season), ts: m.ts, a: m.a, b: m.b, sa: m.sa == null ? null : m.sa, sb: m.sb == null ? null : m.sb, status: m.status, mods: (m.mods || []).slice(), by: m.by || '' });
+  const pickSeason = s => ({ id: Number(s.id), name: s.name, start: s.start, end: s.end || null, status: s.status, quota: s.quota, players: s.players.slice() });
+  const pickPlayer = p => ({ name: p.name, active: !!p.active, c: p.c == null ? 0 : p.c });
+  const logKey = l => [l.ts, l.by, l.match == null ? '' : l.match, l.what].join('|');
+
+  /* Mémorise l'état connu du serveur, pour ne renvoyer que ce qui change. */
+  function takeSnap() {
+    snap = { m: {}, s: {}, p: {}, l: new Set() };
+    state.matches.forEach(m => { snap.m[m.id] = JSON.stringify(pickMatch(m)); });
+    state.seasons.forEach(s => { snap.s[s.id] = JSON.stringify(pickSeason(s)); });
+    state.players.forEach(p => { snap.p[p.name] = JSON.stringify(pickPlayer(p)); });
+    state.log.forEach(l => snap.l.add(logKey(l)));
+  }
+
+  /* Compare l'état local à ce que le serveur connaît et prépare les envois. */
+  function queue() {
+    if (!API || !snap) return;
+    const ops = [];
+    state.matches.forEach(m => { const j = JSON.stringify(pickMatch(m)); if (snap.m[m.id] !== j) { ops.push({ t: 'match', row: JSON.parse(j) }); snap.m[m.id] = j; } });
+    state.seasons.forEach(s => { const j = JSON.stringify(pickSeason(s)); if (snap.s[s.id] !== j) { ops.push({ t: 'season', row: JSON.parse(j) }); snap.s[s.id] = j; } });
+    state.players.forEach(p => { const j = JSON.stringify(pickPlayer(p)); if (snap.p[p.name] !== j) { ops.push({ t: 'player', row: JSON.parse(j) }); snap.p[p.name] = j; } });
+    Object.keys(snap.p).forEach(n => { if (!state.players.some(p => p.name === n)) { ops.push({ t: 'playerDel', name: n }); delete snap.p[n]; } });
+    state.log.slice().reverse().forEach(l => {
+      const k = logKey(l);
+      if (!snap.l.has(k)) { ops.push({ t: 'log', row: { ts: l.ts, by: l.by, match: l.match == null ? null : String(l.match), what: l.what } }); snap.l.add(k); }
+    });
+    if (ops.length) { outbox.push(...ops); saveOutbox(); paintNet(); }
+    setTimeout(() => syncNow(false), 50);
+  }
+
+  function mergeList(local, remote, keyOf) {
+    const idx = new Map(local.map(x => [keyOf(x), x]));
+    const seen = new Set();
+    remote.forEach(r => {
+      const k = keyOf(r); seen.add(k);
+      const l = idx.get(k);
+      if (l) { Object.keys(l).forEach(f => { if (!(f in r)) delete l[f]; }); Object.assign(l, r); } else local.push(r);
+    });
+    for (let i = local.length - 1; i >= 0; i--) if (!seen.has(keyOf(local[i]))) local.splice(i, 1);
+  }
+
+  /* Reprend l'état du serveur en gardant les mêmes objets, pour que les fenêtres ouvertes restent valables. */
+  function adopt(srv, rev) {
+    mergeList(state.players, srv.players, p => p.name);
+    mergeList(state.seasons, srv.seasons, s => String(s.id));
+    mergeList(state.matches, srv.matches, m => String(m.id));
+    state.log = srv.log;
+    net.rev = rev; net.loaded = true;
+    takeSnap(); save(); render();
+  }
+
+  async function call(action, extra) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 25000);
+    try {
+      const res = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ code, action }, extra || {})), signal: ctl.signal });
+      return await res.json();
+    } finally { clearTimeout(timer); }
+  }
+  const serverErr = r => { const e = new Error(r.error || 'erreur'); e.server = true; e.code = r.error; return e; };
+
+  async function flush() {
+    while (outbox.length) {
+      const batch = outbox.slice(0, 100);
+      const r = await call('apply', { ops: batch });
+      if (r.ok) {
+        outbox.splice(0, batch.length); saveOutbox(); net.rev = r.rev;
+        if (!outbox.length) adopt(r.state, r.rev);
+        continue;
+      }
+      if (r.error === 'code') throw serverErr(r);
+      /* Le serveur a refusé le lot : on isole l'opération fautive pour ne pas bloquer les autres. */
+      let refused = 0;
+      for (const op of batch) {
+        const one = await call('apply', { ops: [op] });
+        if (one.error === 'code') throw serverErr(one);
+        if (!one.ok) refused++;
+      }
+      outbox.splice(0, batch.length); saveOutbox(); net.rev = null;
+      if (refused) toast(plural(refused, 'modification refusée', 'modifications refusées') + ' par le serveur : ' + r.error);
+    }
+  }
+
+  async function syncNow(force) {
+    if (!API || !code) return;
+    if (net.busy) { net.again = true; return; }
+    net.busy = true; net.state = 'sync'; paintNet();
+    try {
+      if (outbox.length) await flush();
+      if (!outbox.length) {
+        net.tick++;
+        const r = await call('sync', { since: force || net.tick % 4 === 0 ? null : net.rev });
+        if (!r.ok) throw serverErr(r);
+        if (outbox.length) net.again = true;
+        else if (!r.unchanged) adopt(r.state, r.rev); else net.rev = r.rev;
+      }
+      net.loaded = true; net.at = new Date().toTimeString().slice(0, 5);
+      net.state = outbox.length ? 'pending' : 'ok';
+    } catch (e) {
+      if (e.server && e.code === 'code') {
+        code = ''; try { localStorage.removeItem(CODE_KEY); } catch (x) { /* ignoré */ }
+        net.state = 'locked'; paintNet(); askCode('Le code d’accès a changé ou n’est plus valable. Saisis le nouveau.');
+      } else if (e.server) { net.state = 'error'; net.error = e.message; } else net.state = 'offline';
+    } finally {
+      net.busy = false; paintNet(); render();
+      if (net.again) { net.again = false; setTimeout(() => syncNow(false), 200); }
+    }
+  }
+
+  function paintNet() {
+    const el = document.getElementById('net');
+    if (!el) return;
+    const n = outbox.length;
+    const pend = n ? ' · ' + plural(n, 'modification à envoyer', 'modifications à envoyer') : '';
+    const txt = {
+      local: 'Mode démo : les données restent sur cet appareil',
+      locked: 'Non connecté',
+      idle: 'Connexion…',
+      sync: 'Synchronisation…' + pend,
+      ok: 'Synchronisé' + (net.at ? ' à ' + net.at : ''),
+      pending: 'En attente d’envoi' + pend,
+      offline: 'Hors connexion' + pend,
+      error: 'Erreur : ' + net.error + pend
+    }[net.state] || '';
+    el.className = 'netline ' + net.state;
+    el.replaceChildren(h('i', { class: 'nd' }), txt);
+    el.disabled = !API;
+  }
+
+  function takeCodeFromHash() {
+    const m = /(?:^|[#&])code=([^&]+)/.exec(location.hash || '');
+    if (!m) return null;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignoré */ }
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+
+  async function connect(candidate) {
+    const prev = code; code = candidate;
+    try {
+      const r = await call('ping');
+      if (r.ok) { try { localStorage.setItem(CODE_KEY, code); } catch (e) { /* ignoré */ } return { ok: true }; }
+      code = prev;
+      return { ok: false, msg: r.error === 'code' ? 'Code refusé. Vérifie-le auprès de l’organisateur.' : 'Réponse inattendue du serveur.' };
+    } catch (e) {
+      code = prev;
+      return { ok: false, msg: 'Impossible de joindre le serveur. Vérifie ta connexion et réessaie.' };
+    }
+  }
+
+  function askCode(message, prefill) {
+    const sh = openSheet(true);
+    const input = h('input', { type: 'text', id: 'access-code', placeholder: 'barn-xxxx-xxxx-xxxx', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Code d’accès', value: prefill || '' });
+    const msg = h('p', { class: 'hint err', 'aria-live': 'polite' }, message || '');
+    const go = h('button', { type: 'button', class: 'btn primary', onclick: async () => {
+      const v = input.value.trim();
+      if (!v) return;
+      go.disabled = true; msg.className = 'hint'; msg.textContent = 'Vérification…';
+      const r = await connect(v);
+      if (r.ok) { sh.close(); net.state = 'idle'; await syncNow(true); afterReady(); startPolling(); }
+      else { msg.className = 'hint err'; msg.textContent = r.msg; go.disabled = false; }
+    } }, 'Se connecter');
+    sh.set(h('h2', {}, 'Code d’accès'),
+      h('p', { class: 'hint' }, 'Saisis le code que l’organisateur t’a donné. Tu ne le saisis qu’une fois sur ce téléphone.'),
+      input, msg, go);
+  }
+
+  function afterReady() {
+    if (!state.players.length) return;
+    if (!me || !state.players.some(p => p.name === me && p.active)) askWho(); else checkPending();
+  }
+
+  function startPolling() {
+    if (net.polling || !API) return;
+    net.polling = true;
+    setInterval(() => { if (document.visibilityState !== 'hidden') syncNow(false); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(false); });
+    window.addEventListener('online', () => syncNow(true));
+  }
+
+  const inviteLink = () => location.origin + location.pathname + '#code=' + encodeURIComponent(code);
+
+  /* ---------- Affichage ---------- */
+  const VIEWS = { classement: viewClassement, duels: viewDuels, matchs: viewMatchs, saison: viewSaison };
+  function currentTab() { const t = (location.hash || '').slice(1); return TABS.includes(t) ? t : 'classement'; }
+  function render() {
+    const tab = currentTab(), s = curSeason();
+    document.querySelectorAll('.tab').forEach(b => { if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    document.getElementById('season-label').textContent = s ? s.name + ' · depuis le ' + fmtShort(s.start) : 'Aucune saison ouverte';
+    const who = document.getElementById('who');
+    who.replaceChildren('Je suis ', h('b', {}, me || '?'));
+    paintNet();
+    if (API && !net.loaded && !state.players.length) {
+      document.getElementById('main').replaceChildren(h('div', { class: 'card stack' },
+        h('p', {}, net.state === 'offline' || net.state === 'error' ? 'Impossible de joindre le serveur pour le moment.' : 'Chargement des données…'),
+        net.state === 'offline' || net.state === 'error' ? h('button', { type: 'button', class: 'btn', onclick: () => syncNow(true) }, 'Réessayer') : null));
+      return;
+    }
+    document.getElementById('main').replaceChildren(VIEWS[tab]());
+  }
+
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { if (currentTab() === b.dataset.tab) { window.scrollTo(0, 0); render(); } else location.hash = b.dataset.tab; }));
+  document.getElementById('fab').addEventListener('click', () => { if (!me) askWho(); else startMatch(); });
+  document.getElementById('who').addEventListener('click', () => { location.hash = 'saison'; });
+  document.getElementById('theme').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
+  window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+
+  document.getElementById('net').addEventListener('click', () => syncNow(true));
+  applyTheme();
+  if (API && !snap) takeSnap();
+  render();
+  (async function boot() {
+    if (!API) { if (!me || !state.players.some(p => p.name === me && p.active)) askWho(); else checkPending(); return; }
+    const fromLink = takeCodeFromHash();
+    if (fromLink) {
+      const r = await connect(fromLink);
+      if (!r.ok) { askCode(r.msg, fromLink); return; }
+    }
+    if (!code) { net.state = 'locked'; paintNet(); askCode(); return; }
+    net.state = 'idle';
+    await syncNow(true);
+    afterReady();
+    startPolling();
+  })();
+})();
+
+</script>
+<script>if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(function () {}); }</script>
+</body>
+</html>
