@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>La Barniote : les règles</title>
+<meta name="description" content="Les règles officielles de la Barniote.">
+<meta name="theme-color" content="#1E6B50">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+:root{color-scheme:light dark;--bg:#EDF0EC;--surface:#fff;--surface2:#E4EAE5;--ink:#13201A;--muted:#57665E;--line:#D3DCD5;--accent:#1E6B50;--accent-ink:#fff;--mark:#E3F1EA}
+@media (prefers-color-scheme:dark){:root{--bg:#0C1310;--surface:#141D18;--surface2:#1B2721;--ink:#E7EEE9;--muted:#9AABA2;--line:#2A3830;--accent:#5FBF98;--accent-ink:#08150F;--mark:#1D3328}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 "Hanken Grotesk",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px calc(48px + env(safe-area-inset-bottom))}
+header.hero{background:var(--accent);color:var(--accent-ink);padding:calc(28px + env(safe-area-inset-top)) 16px 26px}
+header.hero .in{max-width:720px;margin:0 auto}
+.back{display:inline-block;color:inherit;opacity:.85;text-decoration:none;font-size:15px;margin-bottom:14px}
+.back:hover{opacity:1;text-decoration:underline}
+h1{font:700 clamp(40px,12vw,64px)/.95 "Barlow Condensed",sans-serif;letter-spacing:.01em;text-transform:uppercase;margin:0}
+.tag{margin:10px 0 0;opacity:.9;font-size:16px}
+nav.toc{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+nav.toc .in{max-width:720px;margin:0 auto;display:flex;gap:8px;overflow-x:auto;padding:10px 16px;scrollbar-width:none}
+nav.toc .in::-webkit-scrollbar{display:none}
+nav.toc a{flex:none;color:var(--ink);text-decoration:none;font-size:14px;font-weight:600;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+nav.toc a:hover{border-color:var(--accent)}
+section{padding-top:30px}
+h2{font:700 30px/1.1 "Barlow Condensed",sans-serif;letter-spacing:.02em;text-transform:uppercase;margin:0 0 12px;color:var(--accent)}
+h3{font:700 22px/1.2 "Barlow Condensed",sans-serif;letter-spacing:.02em;text-transform:uppercase;margin:26px 0 8px}
+h3 .n{display:inline-grid;place-items:center;width:28px;height:28px;margin-right:8px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:16px;vertical-align:2px}
+h4{font-size:16px;margin:22px 0 6px}
+p{margin:0 0 12px}
+ul{margin:0 0 12px;padding-left:22px}
+li{margin-bottom:8px}
+.t{background:var(--mark);border-radius:4px;padding:0 3px;font-weight:600}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:14px 0}
+.card.note{border-left:4px solid var(--accent)}
+.card .lab{font:600 13px "Hanken Grotesk",sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.fig{margin:14px 0;text-align:center}
+.fig img{width:min(240px,70%);height:auto;background:#fff;border-radius:12px;padding:10px;border:1px solid var(--line)}
+.fig figcaption{font-size:14px;color:var(--muted);margin-top:6px;font-style:italic}
+.cry{font-style:italic}
+.pts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.pts div{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.pts b{display:block;font:700 30px/1 "Barlow Condensed",sans-serif;color:var(--accent)}
+.pts span{font-size:14px;color:var(--muted)}
+.btn{display:inline-block;margin-top:24px;padding:12px 18px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font-weight:700;text-decoration:none}
+footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+@media print{nav.toc,.btn,.back{display:none}header.hero{background:none;color:#000;padding-top:0}body{background:#fff;color:#000}.card,.pts div{border-color:#999}}
+</style>
+</head>
+<body>
+<header class="hero"><div class="in">
+  <a class="back" href="./">← Retour à l’appli</a>
+  <h1>La Barniote</h1>
+  <p class="tag">Les règles du jeu, validées par la Fédération Française de Barniote Inter-Théâtre (FFBIT)</p>
+</div></header>
+
+<nav class="toc"><div class="in">
+  <a href="#presentation">Présentation</a><a href="#but">But du jeu</a><a href="#lancer">Le lancer</a><a href="#partie">Déroulement</a><a href="#base">Règles de base</a><a href="#avancees">Règles avancées</a><a href="#amicaux">Amicaux</a><a href="#honneur">Code d’honneur</a>
+</div></nav>
+
+<main class="wrap">
+
+<section id="presentation">
+  <h2>Présentation</h2>
+  <p>La <b>Barniote</b> est un jeu d’adresse utilisant un rouleau de barnier (ou scotch d’électricien), utilisé notamment dans le milieu du spectacle vivant. Elle a été inventée en 2025, à l’Opéra de Reims par 4 techniciens : Sancho, Momo, Nico et Polo.</p>
+  <p>Les lignes qui vont suivre expliquent en détail les règles de ce dernier.</p>
+</section>
+
+<section id="but">
+  <h2>But du jeu</h2>
+  <p>La <b>BARNIOTE</b> est un jeu de gentlemen où deux joueur·euses (le·la <span class="t">barnioteur·euse</span> et le·la <span class="t">barnioté·e</span>) s’affrontent chacun leur tour dans un jeu d’adresse consistant à envoyer en l’air, dans une rotation impeccable, un barnier et à le réceptionner sur son majeur.</p>
+  <div class="pts">
+    <div><b>7</b><span>points pour gagner</span></div>
+    <div><b>1 contre 1</b><span>chacun son tour</span></div>
+  </div>
+  <p>Chaque partie se termine en 7 points gagnants et se compose d’autant de rounds que nécessaire pouvant s’étaler sur toute une journée de travail, sans entraver les activités annexes.</p>
+</section>
+
+<section id="lancer">
+  <h2>Règles du jeu</h2>
+  <h3>Avant-propos technique : le lancer</h3>
+  <p>Pour qu’une Barniote soit valide, il est important de respecter certaines règles :</p>
+  <figure class="fig"><img src="barniote-lancer.png" alt="Illustration d’une barniote réussie : le barnier est posé sur la main, lancé en l’air en tournant, puis réceptionné sur le majeur."><figcaption>Illustration explicative d’une barniote réussie.</figcaption></figure>
+  <ul>
+    <li>Lors du lancer, le barnier doit effectuer au minimum <b>un tour</b> sur lui-même à une hauteur respectable (plus haut que les yeux du lanceur), ou <b>plusieurs tours (au moins deux)</b> à une hauteur moindre avant d’être réceptionné sur le majeur.
+      <p style="margin-top:8px">Si cette règle n’est pas respectée, le·la barnioté·e (le·la défenseur·se) peut protester par un <span class="cry">« Mimou… »</span> qui sera d’abord pris comme un avertissement. Mais s’il·elle récidive au cours de la partie, le·la barnioté peut annoncer un <span class="cry">« Barnier Mou ! »</span>, qui annulera le tour de son adversaire et lui permettra de récupérer la main.</p></li>
+    <li>Chaque lanceur·se est tenu de garder <b>une main dans le dos</b> lors du lancer, sous peine d’annulation de son tour par son adversaire en protestant un <span class="cry">« Barniot Manchot »</span> qui récupère la main.</li>
+    <li>Le diamètre intérieur du barnier doit être au maximum de <b>31 mm</b> pour être homologué par la FFBIT.</li>
+    <li>Son taux de remplissage est à la préférence du·de la joueur·se, qui peut également le personnaliser à son goût.</li>
+  </ul>
+</section>
+
+<section id="partie">
+  <h2>Déroulement de partie</h2>
+  <h3><span class="n">1</span>Le salut</h3>
+  <p>Il est toujours de bon ton de défier son adversaire par une phrase amicale telle que <span class="cry">« Une ’tite Barniote ? »</span> et de ne pas oublier de saluer ce dernier au début de chaque partie par un check des barniers. Le·la joueur·se qui provoque la rencontre choisit le terrain de jeu et laisse la main à son adversaire qui se verra jouer en premier. En fin de jeu, il est également de bon ton de re-saluer son adversaire par un ultime check de barniers, le jeu étant avant tout, un jeu de gentlemen.</p>
+
+  <h3><span class="n">2</span>L’échange</h3>
+  <p>Le·la <span class="t">barnioteur·se</span> est le·la joueur·se qui engage le round. Il·elle va donc tenter de rentrer une <span class="t">Barniote</span> pendant que son adversaire patiente en lui faisant face.</p>
+  <p>Un échange se déroule de la manière suivante :</p>
+  <p>Le·la joueur·se qui a la main lance, s’il·elle échoue à barnioter, la main passe à son adversaire et ainsi de suite jusqu’à ce qu’une Barniote soit rentrée.</p>
+  <div class="card note"><div class="lab">Sur un coup gagnant (une Barniote), le lanceur peut</div>
+    <ul style="margin:0">
+      <li><b>Garder son point :</b> il se soumet alors à la tentative de <span class="t">Contre</span> de son adversaire.</li>
+      <li><b>Tenter de doubler son point</b> en effectuant une <span class="t">Re-Barniote</span> (cf. règles) puis se soumettre au contre en cas de réussite. Sur un échec, la main passe à son adversaire.</li>
+    </ul></div>
+  <p>Une fois le Contre effectué, si au moins un point a été marqué, le·la joueur·se ayant le moins de points prend la main et un nouvel échange commence (il est donc possible de rejouer juste après avoir effectué une Barniote si on a toujours le score le moins élevé).</p>
+  <p>En cas d’égalisation, le·la dernier·e joueur·se à avoir perdu le point reprend la main.</p>
+
+  <h3><span class="n">3</span>La victoire</h3>
+  <p>Un match se termine lorsque :</p>
+  <ul>
+    <li>un·e joueur·se atteint 7 points (après contre) ;</li>
+    <li>une <span class="t">Fin de Show</span> survient ;</li>
+    <li>la fin du monde survient.</li>
+  </ul>
+</section>
+
+<section id="base">
+  <h2>Règles de base</h2>
+  <h3><span class="n">1</span>Le contre</h3>
+  <p>L’adversaire se voit offrir la possibilité d’annuler le point en cours en rentrant lui aussi une Barniote sous les mêmes conditions que son adversaire (barniote simple ; À l’ancienne ; Re-Barniote, etc.).</p>
+
+  <h3><span class="n">2</span>La Big Barniote</h3>
+  <p>Si un·e joueur·se rentre une Barniote sur son <b>premier lancer de la partie</b> (hors Contre et Barniote ça filotte) il marque <b>2 points</b>.</p>
+  <p>Cette Big Barniote peut être contrée normalement par une barniote de son adversaire.</p>
+  <div class="card"><div class="lab">Exemple</div>
+    <ul style="margin:0">
+      <li>Le premier joueur rentre une Big Barniote à son premier lancer, son adversaire tente un contre et le rate. Il marque 2 pts.</li>
+      <li>Vient ensuite le premier tour de son adversaire, qui rentre également une Big Barniote (le Contre ne compte pas comme son premier lancer).</li>
+      <li>Le joueur tente alors le Contre et le réussit, annulant les 2 pts de son adversaire.</li>
+      <li>Score de l’échange : 2-0.</li>
+    </ul></div>
+  <p>Il est possible de rajouter la condition <b>À l’ancienne</b> (cf. règles avancées) à la Big Barniote, celle-ci valant <b>4 points</b>. De quoi faire trembler votre adversaire dès le premier lancer !</p>
+
+  <h3><span class="n">3</span>La Re-Barniote</h3>
+  <p>Suite à une Barniote réussie (même sur une Big Barniote, une Barniote de match ou une Barniole) le·la joueur·se peut décider d’annoncer une Re-Barniote et relancer son barnier.</p>
+  <p>Une Re-Barniote <b>double les points</b> de la barniote précédente. Cependant elle <b>annule la série en cas d’échec</b> ! Quitte ou double !</p>
+
+  <h3><span class="n">4</span>L’ultime rempart</h3>
+  <p>Lors d’une <span class="t">Barniote de Match</span> (7<sup>e</sup> point marqué par un·e joueur·se avant contre), le défenseur peut <span class="t">Barnioler</span> sur son Contre : c’est l’Ultime Rempart.</p>
+  <p>Une <span class="t">Barniole</span> permet de relancer son barnier quand ce dernier est rattrapé par la même main de lancer sans toucher ni le sol, ni le reste du corps du·de la joueur·se. Une fois rattrapée le·la joueur·se annonce sa Barniole, un nombre suivant une incrémentation de trois. Le·la premier·e joueur·se à annoncer une Barniole au cours de la partie commence son annonce à 1 (puis 4 ; 7 ; 10…) son adversaire commencera donc la sienne à 2 (puis 5 ; 8 ; 11…). À chaque Barniole réussie le·la joueur·se devra ajouter 3 à sa précédente Barniole. S’il se trompe dans le nombre énoncé, son adversaire peut rétorquer un <span class="cry">« Rikikit ! »</span>, interrompant ainsi la tentative de contre et validant son 7<sup>e</sup> point.</p>
+  <p>Cette règle n’est applicable qu’<b>une seule fois par joueur·euse</b>. Sur la Barniote de Match suivante, le·la défenseur doit contrer en un seul essai comme habituellement.</p>
+
+  <h3><span class="n">5</span>Overkill</h3>
+  <p>Il est possible lors de sa Barniote de Match de Rebarnioter ou de Barnioter À l’ancienne afin de dépasser les 7 points nécessaires à la victoire.</p>
+  <p>C’est l’<b>Overkill</b>. Dans ce cas le score monte à 8 ou plus et le défenseur doit contrer l’intégralité des points marqués pour ne pas perdre le match.</p>
+
+  <h3><span class="n">6</span>Fin de Show !</h3>
+  <p>Si un·e joueur·se perd son barnier en cours de partie et n’est pas en capacité de le récupérer promptement et en toute sécurité, la règle Fin de Show s’applique, mettant fin à la partie et déclarant son adversaire vainqueur avec ses points actuels.</p>
+</section>
+
+<section id="avancees">
+  <h2>Règles avancées</h2>
+  <h3><span class="n">1</span>Barniote ça filotte !</h3>
+  <p>Si le barnier tombe au sol et se met à rouler, le barnioté (défenseur) se doit de dire avec une diction impeccable : <span class="cry">« Barniote qui filotte ! »</span> OU <span class="cry">« Barniote ça filotte ! »</span> (les deux sont acceptés). Le·la joueur·se ayant perdu son barnier doit partir à sa poursuite pendant que l’autre peut tenter de rentrer une Barniote avant qu’il ne le récupère. Il dispose d’autant de lancers qu’il peut en réaliser dans ce laps de temps. S’il réussit à placer une Barniote, il doit annoncer <span class="cry">« C’est moi qui Barniote ! »</span> et marque un point. Si le·la joueur·se en cavale récupère son barnier il annonce <span class="cry">« Pas touche la barniote ! »</span> ou <span class="cry">« Pas touche ma barniote ! »</span> en brandissant son barnier. Le premier des deux à placer sa phrase met fin à la Filotte. Le match peut reprendre là où il en était sans modifier le changement de main prévu avant la Filotte.</p>
+  <p>Si une Filotte est déclarée trop tôt ou que le barnier n’a pas roulé du tout, le joueur recevra un avertissement. Au deuxième donné au cours de la partie, celui-ci n’aura plus le droit de filotter.</p>
+
+  <h3><span class="n">2</span>Pet coincé</h3>
+  <p>Si le barnier du lanceur reste coincé sur le doigt sans descendre complètement, le·la joueur·se doit déclarer rapidement <span class="cry">« Pet coincé ! »</span> avant son adversaire pour valider son point.</p>
+  <p>Si l’adversaire est plus rapide que lui, le point est annulé et il récupère la main.</p>
+
+  <h3><span class="n">3</span>À l’ancienne</h3>
+  <p>Sur un timing parfait il est possible de synchroniser une barniote avec un vent. Elle est donc dite « À l’ancienne » et vaut <b>un point supplémentaire</b>.</p>
+  <p>En cas de contre l’adversaire peut lui aussi tenter une Barniote À l’ancienne pour annuler les deux points ou simplement réussir deux Barniotes de contre à la suite pour nullifier le score. Pour affirmer sa prestance et asseoir sa maîtrise il peut proclamer une phrase de son cru, exemple : <span class="cry">« Il y a du vent dans les guindes ! »</span>, <span class="cry">« Le grill nous tombe sur la tête ! »</span>, <span class="cry">« Ça buzz en façade ! »</span>, ou encore <span class="cry">« La gazeuse est à burne, on est sûr que les têtes sont bien coupées ?! »</span>.</p>
+
+  <h3><span class="n">4</span>La Figure</h3>
+  <p>Il est possible de réceptionner son barnier de manière artistique en effectuant une figure. Celle-ci augmente considérablement la difficulté mais accroît de manière cosmique l’aura de celui qui réussit. Elle ne vaut <b>aucun point supplémentaire</b>, n’impose pas une figure sur le contre. En revanche, elle possède un effet dévastateur sur le moral de l’adversaire.</p>
+  <p>Toutefois, un barnioteur digne de ce nom aura tendance à répondre à une figure par une figure pour garder son honneur intact et éviter les quolibets de ses pairs. <i>(Barnioteur amateur !!!)</i></p>
+</section>
+
+<section id="amicaux">
+  <h2>Matchs amicaux (non officiels)</h2>
+  <p>Il est possible de disputer un match en choisissant de bannir ou d’ajouter certaines règles afin de pimenter, accélérer, simplifier ou complexifier la partie.</p>
+  <p>Exemple : « Re-Barniote » obligatoire à chaque tour ou encore pas de « contres » pour une partie plus rapide.</p>
+  <p>Ces matchs ne sont pas comptabilisés par la FFBIT et ne comptent pas comme des victoires quotidiennes et ne peuvent pas remplacer une partie classée. Ils représentent néanmoins un bon moyen de s’entraîner.</p>
+</section>
+
+<section id="honneur">
+  <h2>Code d’honneur du Barnioteur</h2>
+  <div class="card note">
+    <ul style="margin:0">
+      <li>Le barnioteur doit savoir se montrer honorable.</li>
+      <li>Toujours il respecte les règles.</li>
+      <li>Jamais il ne pose pied sur un barnier à terre.</li>
+      <li>Jamais il n’interfère avec la voltige d’un barnier adverse ou avec la cavale d’une filotte.</li>
+      <li>Jamais il ne modifie ou dérobe le barnier personnel d’un autre.</li>
+    </ul>
+  </div>
+  <p>Si un·e joueur·se, de quelque façon que ce soit, manque à son éthique de gentleman barnioteur, le·la joueur·se offensé peut clamer <span class="cry">« Traître à la Barniote ! »</span>, <span class="cry">« Barnioteur de bas étage ! »</span> ou quelque injure de son choix pour afficher son mécontentement quant au respect de l’éthique de la Barniote. En effet, il ne faut pas oublier que la Barniote est un jeu de gentleman et que la réputation dudit joueur en question risque d’en pâtir, surtout si la partie se déroule en public.</p>
+  <p>Les parties de Barniote les plus underground, réalisées sans publics, dans l’illégalité la plus complète, sont réputées comme le terrain des actes le plus vils et les plus traîtres où les barnioteurs oublient bien souvent leurs conditions de gentleman. Elles sont bien sûr illégales et officiellement rejetées par la FFBIT mais sont officieusement un « Haut Fait » âprement recherché par nombre de Barnioteurs en quête de renommée.</p>
+</section>
+
+<a class="btn" href="regles.pdf" download>Télécharger le PDF</a>
+<footer>Retour à <a href="./" style="color:inherit">l’appli Barniotte</a>.</footer>
+</main>
+</body>
+</html>

@@ -837,6 +837,9 @@ const Core = (() => {
     const out = h('div', { class: 'stack' });
     if (!API) out.append(h('p', { class: 'note' }, 'Prototype : les données restent sur cet appareil. La synchronisation avec Google Sheets viendra ensuite.'));
 
+    if (API) out.append(h('div', { class: 'card' },
+      h('a', { class: 'btn', href: 'regles.html', style: 'display:block;text-align:center;text-decoration:none;color:inherit' }, 'Règles')));
+
     out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Affichage'),
       chips(['Auto', 'Clair', 'Sombre'], { selected: [THEME_NAMES[theme]], onChange: v => setTheme(THEME_KEYS[v[0]]) }),
       h('p', { class: 'hint' }, 'Auto suit le réglage de ton téléphone. Clair ou Sombre force l\u2019affichage.')));
