@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Barniotte</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#EDF0EC" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0C1310" media="(prefers-color-scheme: dark)">
 <meta name="description" content="Suivi des parties de Barniotte : classement, duels, historique.">
@@ -366,8 +368,26 @@ const Core = (() => {
   'use strict';
   const { MODS, COMBO, modsNorm, key, winner, checkScore, pairCountAll, maxPairCount, standings, esc, byTime, fr } = Core;
   const SEED = {"players":[],"seasons":[],"matches":[],"log":[]};
-  const API = (window.BARNIOTTE && window.BARNIOTTE.api) || '';
-  const KEY = API ? 'barniotte-cache-v1' : 'barniotte-proto-v2', ME_KEY = 'barniotte-proto-me';
+  const CONFIG_API = (window.BARNIOTTE && window.BARNIOTTE.api) || '';
+  const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
+  const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
+  const LATEST_SCRIPT = 3;             // dernière version du script serveur connue de cette appli
+  const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
+  const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
+  const nsOf = a => { let x = 2166136261; for (let i = 0; i < a.length; i++) { x ^= a.charCodeAt(i); x = Math.imul(x, 16777619); } return '-' + (x >>> 0).toString(36); };
+  /* Groupe actif : celui choisi sur cet appareil (lien d'invitation), sinon celui de config.js s'il y en a un. */
+  let API = CONFIG_API;
+  { const st = lsGet('barniotte-api'); if (st && API_RE.test(st)) API = st; }
+  const NS = API ? nsOf(API) : '';   // chaque groupe a ses propres données sur l'appareil
+  /* Reprise des données d'avant les groupes multiples : elles appartiennent au groupe de config.js. */
+  if (API && API === CONFIG_API && !lsGet('barniotte-api')) {
+    ['barniotte-cache-v1', 'barniotte-code', 'barniotte-outbox', 'barniotte-proto-me'].forEach(k => { const v = lsGet(k); if (v != null && lsGet(k + NS) == null) lsSet(k + NS, v); });
+    lsSet('barniotte-api', API);
+  }
+  const KEY = API ? 'barniotte-cache-v1' + NS : 'barniotte-proto-v2', ME_KEY = 'barniotte-proto-me' + NS;
+  /* Texte libre accepté par le serveur : court, sans caractère de contrôle, et qui ne commence pas comme une formule. */
+  const badText = (v, max) => v.length > max ? 'Texte trop long (' + max + ' caractères au maximum).' : (/[\u0000-\u001f\u007f]/.test(v) || /^[=+\-@]/.test(v) ? 'Le texte ne doit pas commencer par = + - ou @.' : '');
   const TABS = ['classement', 'duels', 'matchs', 'saison'];
 
   /* ---------- Données ---------- */
@@ -663,8 +683,8 @@ const Core = (() => {
     ends.sort((a, b) => a.y - b.y);
     for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
     ends.forEach(e => { svg += '<text class="ch-lbl" x="' + (W - R + 8) + '" y="' + (e.y + 4) + '" fill="' + e.col + '">' + esc(e.p) + '</text>'; });
-    svg += '<text class="ch-t" x="' + L + '" y="' + (H - 6) + '">' + fmtShort(days[0]) + '</text>';
-    svg += '<text class="ch-t" x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + fmtShort(days[days.length - 1]) + '</text>';
+    svg += '<text class="ch-t" x="' + L + '" y="' + (H - 6) + '">' + esc(fmtShort(days[0])) + '</text>';
+    svg += '<text class="ch-t" x="' + (W - R) + '" y="' + (H - 6) + '" text-anchor="end">' + esc(fmtShort(days[days.length - 1])) + '</text>';
     return svg + '</svg>';
   }
 
@@ -793,8 +813,9 @@ const Core = (() => {
           h('div', { class: 'stepper' },
             h('button', { type: 'button', 'aria-label': 'Moins', disabled: quota <= 1, onclick: () => { quota--; draw(); } }, '−'), h('output', {}, String(quota)),
             h('button', { type: 'button', 'aria-label': 'Plus', disabled: quota >= 40, onclick: () => { quota++; draw(); } }, '+'))),
+        badText(name.trim(), 60) ? h('p', { class: 'hint err' }, 'Nom de saison : ' + badText(name.trim(), 60)) : null,
         picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.'),
-        h('button', { type: 'button', class: 'btn primary', disabled: picked.length < 2 || !name.trim(), onclick: () => {
+        h('button', { type: 'button', class: 'btn primary', disabled: picked.length < 2 || !name.trim() || !!badText(name.trim(), 60), onclick: () => {
           const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'en_cours', quota, players: picked.slice().sort(fr) };
           state.seasons.push(s); logEntry(s.name + ' ouverte : ' + s.players.join(', ') + ', ' + quota + ' matchs par duo', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
         } }, 'Ouvrir la saison'));
@@ -837,8 +858,7 @@ const Core = (() => {
     const out = h('div', { class: 'stack' });
     if (!API) out.append(h('p', { class: 'note' }, 'Prototype : les données restent sur cet appareil. La synchronisation avec Google Sheets viendra ensuite.'));
 
-    if (API) out.append(h('div', { class: 'card' },
-      h('a', { class: 'btn', href: 'regles.html', style: 'display:block;text-align:center;text-decoration:none;color:inherit' }, 'Règles')));
+    if (API) out.append(h('div', { class: 'card' }, linkBtn('regles.html', 'Règles')));
 
     out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Affichage'),
       chips(['Auto', 'Clair', 'Sombre'], { selected: [THEME_NAMES[theme]], onChange: v => setTheme(THEME_KEYS[v[0]]) }),
@@ -878,6 +898,8 @@ const Core = (() => {
     const add = () => {
       const n = input.value.trim();
       if (!n) return;
+      const bad = badText(n, 40);
+      if (bad) { toast(bad); return; }
       if (state.players.some(p => p.name.toLowerCase() === n.toLowerCase())) { toast(n + ' existe déjà.'); return; }
       state.players.push({ name: n, active: true, c: Math.max(-1, ...state.players.map(q => (q.c == null ? -1 : q.c))) + 1 }); logEntry('Joueur ajouté : ' + n, null); commit(); toast(n + ' ajouté à la liste.');
     };
@@ -898,7 +920,10 @@ const Core = (() => {
           } }, 'Copier le lien d’invitation')),
         linkBox,
         h('p', { class: 'hint' }, 'Le lien contient le code d’accès : ne l’envoie qu’aux joueurs.'),
-        h('button', { type: 'button', class: 'btn ghost', onclick: () => { code = ''; try { localStorage.removeItem(CODE_KEY); } catch (e) { /* ignoré */ } net.state = 'locked'; paintNet(); askCode(); } }, 'Changer de code')));
+        net.version != null && net.version < LATEST_SCRIPT ? h('p', { class: 'hint' }, 'Le script de ce groupe est en version ' + net.version + ' (la dernière est ' + LATEST_SCRIPT + '). Tout fonctionne, mais l’organisateur peut le mettre à jour avec le guide.') : null,
+        h('div', { class: 'btns' },
+          h('button', { type: 'button', class: 'btn ghost', onclick: () => { code = ''; try { localStorage.removeItem(CODE_KEY); } catch (e) { /* ignoré */ } net.state = 'locked'; paintNet(); askCode(); } }, 'Changer de code'),
+          h('button', { type: 'button', class: 'btn ghost', onclick: leaveGroup }, 'Quitter le groupe'))));
     }
 
     const arch = state.seasons.filter(x => x.status === 'archivee');
@@ -929,12 +954,12 @@ const Core = (() => {
 
 
   /* ---------- Synchronisation avec le Google Sheet ---------- */
-  const CODE_KEY = 'barniotte-code', OUT_KEY = 'barniotte-outbox';
+  const CODE_KEY = 'barniotte-code' + NS, OUT_KEY = 'barniotte-outbox' + NS;
   let code = '';
   try { code = localStorage.getItem(CODE_KEY) || ''; } catch (e) { code = ''; }
   let outbox = [];
   try { outbox = JSON.parse(localStorage.getItem(OUT_KEY) || '[]'); } catch (e) { outbox = []; }
-  const net = { state: API ? (code ? 'idle' : 'locked') : 'local', rev: null, busy: false, again: false, loaded: false, tick: 0, at: '', error: '', polling: false };
+  const net = { state: API ? (code ? 'idle' : 'locked') : (HOSTED ? 'locked' : 'local'), version: null, rev: null, busy: false, again: false, loaded: false, tick: 0, at: '', error: '', polling: false };
   let snap = null;
   const saveOutbox = () => { try { localStorage.setItem(OUT_KEY, JSON.stringify(outbox)); } catch (e) { /* ignoré */ } };
   const uid = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -996,7 +1021,9 @@ const Core = (() => {
     const timer = setTimeout(() => ctl.abort(), 25000);
     try {
       const res = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ code, action }, extra || {})), signal: ctl.signal });
-      return await res.json();
+      const j = await res.json();
+      if (j && j.ok) net.version = typeof j.version === 'number' ? j.version : 0;
+      return j;
     } finally { clearTimeout(timer); }
   }
   const serverErr = r => { const e = new Error(r.error || 'erreur'); e.server = true; e.code = r.error; return e; };
@@ -1069,11 +1096,75 @@ const Core = (() => {
     el.disabled = !API;
   }
 
-  function takeCodeFromHash() {
-    const m = /(?:^|[#&])code=([^&]+)/.exec(location.hash || '');
-    if (!m) return null;
+  /* Lit #api=…&code=… (ou l'ancien #code=…) puis efface l'adresse pour que le code ne reste pas visible. */
+  function takeLinkFromHash() {
+    const hs = location.hash || '';
+    if (!/^#(?:.*&)?(?:api|code)=/.test(hs)) return null;
+    let p;
+    try { p = new URLSearchParams(hs.slice(1)); } catch (e) { return null; }
     try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ignoré */ }
-    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+    return { api: p.get('api') || '', code: p.get('code') || '' };
+  }
+
+  /* Rejoindre un groupe depuis un lien : on contrôle l'adresse, on vérifie que c'est un serveur Barniotte, puis on demande confirmation. */
+  async function joinGroup(apiC, codeC) {
+    const sh = openSheet(true);
+    const stop = msg => sh.set(h('h2', {}, 'Lien non valide'), h('p', {}, msg),
+      h('button', { type: 'button', class: 'btn', onclick: () => { sh.close(); render(); } }, 'Fermer'));
+    if (!API_RE.test(apiC)) { stop('Ce lien ne désigne pas un script Barniotte valide. Demande un nouveau lien à l’organisateur.'); return; }
+    sh.set(h('h2', {}, 'Vérification…'), h('p', { class: 'hint' }, 'Contrôle du lien d’invitation.'));
+    let info = null;
+    try {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+      try { info = await (await fetch(apiC, { signal: ctl.signal })).json(); } finally { clearTimeout(timer); }
+    } catch (e) { info = null; }
+    if (!info || info.service !== 'Barniotte') { stop('Ce lien ne mène pas à un groupe Barniotte, ou le serveur ne répond pas. Vérifie le lien auprès de l’organisateur.'); return; }
+    const id = apiC.split('/')[5];
+    sh.set(h('h2', {}, 'Rejoindre ce groupe ?'),
+      h('p', {}, 'Ce téléphone va se connecter à un Google Sheet de groupe (identifiant …' + id.slice(-6) + '). Les matchs que tu saisiras y seront enregistrés et visibles par ses membres.'),
+      h('p', { class: 'hint' }, 'Ne continue que si le lien vient de l’organisateur de ton groupe.'),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { sh.close(); render(); } }, 'Annuler'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => {
+          lsSet('barniotte-api', apiC);
+          if (codeC) lsSet('barniotte-code' + nsOf(apiC), codeC);
+          location.reload();
+        } }, 'Rejoindre')));
+  }
+
+  function leaveGroup() {
+    const sh = openSheet();
+    sh.set(h('h2', {}, 'Quitter ce groupe ?'),
+      h('p', {}, 'Ce téléphone se déconnecte du groupe. Les données restent dans le Sheet : tu pourras revenir avec le lien d’invitation.'),
+      outbox.length ? h('p', { class: 'hint err' }, plural(outbox.length, 'modification n’est', 'modifications ne sont') + ' pas encore envoyée' + (outbox.length > 1 ? 's' : '') + ' : reviens avec le même lien pour les envoyer.') : null,
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+        h('button', { type: 'button', class: 'btn danger', onclick: () => { lsDel('barniotte-api'); lsDel(CODE_KEY); location.reload(); } }, 'Quitter')));
+  }
+
+  const linkBtn = (href, label) => h('a', { class: 'btn', href, style: 'display:block;text-align:center;text-decoration:none;color:inherit' }, label);
+
+  function viewWelcome() {
+    const input = h('input', { type: 'text', id: 'join-link', placeholder: 'Colle ici le lien d’invitation', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Lien d’invitation' });
+    const msg = h('p', { class: 'hint err', 'aria-live': 'polite' });
+    const go = () => {
+      const v = input.value.trim();
+      const a = /[#&?]api=([^&\s]+)/.exec(v), c = /[#&?]code=([^&\s]+)/.exec(v);
+      let apiV = '', codeV = '';
+      try { apiV = a ? decodeURIComponent(a[1]) : ''; codeV = c ? decodeURIComponent(c[1]) : ''; } catch (e) { apiV = ''; }
+      if (!apiV) { msg.textContent = 'Ce texte ne contient pas un lien d’invitation complet.'; return; }
+      msg.textContent = '';
+      joinGroup(apiV, codeV);
+    };
+    return h('div', { class: 'stack' },
+      h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Bienvenue'),
+        h('p', {}, 'Barniotte suit les matchs, le classement et les duels de ton groupe.'),
+        h('p', { class: 'hint' }, 'Pour rejoindre un groupe, ouvre le lien d’invitation envoyé par l’organisateur, ou colle-le ici.'),
+        input, msg, h('button', { type: 'button', class: 'btn primary', onclick: go }, 'Rejoindre le groupe')),
+      h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Créer un groupe'),
+        h('p', { class: 'hint' }, 'Il faut un Google Sheet et un quart d’heure. Le guide explique tout, pas à pas.'),
+        linkBtn('tuto.html', 'Voir le guide')),
+      h('div', { class: 'card' }, linkBtn('regles.html', 'Règles')));
   }
 
   async function connect(candidate) {
@@ -1119,7 +1210,7 @@ const Core = (() => {
     window.addEventListener('online', () => syncNow(true));
   }
 
-  const inviteLink = () => location.origin + location.pathname + '#code=' + encodeURIComponent(code);
+  const inviteLink = () => location.origin + location.pathname + '#api=' + encodeURIComponent(API) + '&code=' + encodeURIComponent(code);
 
   /* ---------- Affichage ---------- */
   const VIEWS = { classement: viewClassement, duels: viewDuels, matchs: viewMatchs, saison: viewSaison };
@@ -1131,6 +1222,7 @@ const Core = (() => {
     const who = document.getElementById('who');
     who.replaceChildren('Je suis ', h('b', {}, me || '?'));
     paintNet();
+    if (HOSTED && !API) { document.getElementById('main').replaceChildren(viewWelcome()); return; }
     if (API && !net.loaded && !state.players.length) {
       document.getElementById('main').replaceChildren(h('div', { class: 'card stack' },
         h('p', {}, net.state === 'offline' || net.state === 'error' ? 'Impossible de joindre le serveur pour le moment.' : 'Chargement des données…'),
@@ -1141,7 +1233,7 @@ const Core = (() => {
   }
 
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { if (currentTab() === b.dataset.tab) { window.scrollTo(0, 0); render(); } else location.hash = b.dataset.tab; }));
-  document.getElementById('fab').addEventListener('click', () => { if (!me) askWho(); else startMatch(); });
+  document.getElementById('fab').addEventListener('click', () => { if (HOSTED && !API) return; if (!me) askWho(); else startMatch(); });
   document.getElementById('who').addEventListener('click', () => { location.hash = 'saison'; });
   document.getElementById('theme').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
   window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
@@ -1151,11 +1243,16 @@ const Core = (() => {
   if (API && !snap) takeSnap();
   render();
   (async function boot() {
-    if (!API) { if (!me || !state.players.some(p => p.name === me && p.active)) askWho(); else checkPending(); return; }
-    const fromLink = takeCodeFromHash();
-    if (fromLink) {
-      const r = await connect(fromLink);
-      if (!r.ok) { askCode(r.msg, fromLink); return; }
+    const link = takeLinkFromHash();
+    if (link && link.api && link.api !== API) { await joinGroup(link.api, link.code); return; }
+    if (!API) {
+      if (HOSTED) { net.state = 'locked'; paintNet(); render(); return; }
+      if (!me || !state.players.some(p => p.name === me && p.active)) askWho(); else checkPending();
+      return;
+    }
+    if (link && link.code) {
+      const r = await connect(link.code);
+      if (!r.ok) { askCode(r.msg, link.code); return; }
     }
     if (!code) { net.state = 'locked'; paintNet(); askCode(); return; }
     net.state = 'idle';

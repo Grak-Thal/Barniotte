@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Créer un groupe Barniotte</title>
+<meta name="description" content="Guide pas à pas pour créer le Google Sheet de ton groupe et le relier à l’appli Barniotte.">
+<meta name="theme-color" content="#1E6B50">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+:root{color-scheme:light dark;--bg:#EDF0EC;--surface:#fff;--surface2:#E4EAE5;--ink:#13201A;--muted:#57665E;--line:#D3DCD5;--accent:#1E6B50;--accent-ink:#fff;--mark:#E3F1EA;--warn:#FFF4DC;--warn-line:#E5C36A;--danger:#9B2C2C}
+@media (prefers-color-scheme:dark){:root{--bg:#0C1310;--surface:#141D18;--surface2:#1B2721;--ink:#E7EEE9;--muted:#9AABA2;--line:#2A3830;--accent:#5FBF98;--accent-ink:#08150F;--mark:#1D3328;--warn:#2E2815;--warn-line:#7A6320;--danger:#F08A8A}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 "Hanken Grotesk",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px calc(48px + env(safe-area-inset-bottom))}
+header.hero{background:var(--accent);color:var(--accent-ink);padding:calc(28px + env(safe-area-inset-top)) 16px 26px}
+header.hero .in{max-width:720px;margin:0 auto}
+.back{display:inline-block;color:inherit;opacity:.85;text-decoration:none;font-size:15px;margin-bottom:14px}
+.back:hover{opacity:1;text-decoration:underline}
+h1{font:700 clamp(36px,10vw,56px)/1 "Barlow Condensed",sans-serif;letter-spacing:.01em;text-transform:uppercase;margin:0}
+.tag{margin:10px 0 0;opacity:.92;font-size:16px}
+h2{font:700 28px/1.1 "Barlow Condensed",sans-serif;letter-spacing:.02em;text-transform:uppercase;margin:0 0 10px;color:var(--accent)}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 12px;padding-left:22px}
+li{margin-bottom:6px}
+a{color:var(--accent)}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0;position:relative}
+.step .n{position:absolute;top:-14px;left:16px;width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font:700 20px "Barlow Condensed",sans-serif}
+.step h2{margin-top:6px}
+.note{border-left:4px solid var(--accent);background:var(--mark);padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0;font-size:16px}
+.warn{border:1px solid var(--warn-line);background:var(--warn);padding:10px 14px;border-radius:10px;margin:12px 0;font-size:16px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;background:var(--surface2);padding:1px 6px;border-radius:5px;word-break:break-all}
+b.ui{background:var(--mark);padding:0 4px;border-radius:4px;font-weight:600}
+button,.btn{font:600 16px "Hanken Grotesk",sans-serif;border-radius:12px;padding:12px 16px;min-height:46px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+input[type=text]{width:100%;font:16px ui-monospace,Menlo,Consolas,monospace;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.out{display:block;margin:10px 0;padding:12px;border-radius:12px;background:var(--surface2);word-break:break-all;font:15px ui-monospace,Menlo,Consolas,monospace}
+.ok{color:var(--accent);font-weight:600}.err{color:var(--danger);font-weight:600}
+details{margin:10px 0}summary{cursor:pointer;font-weight:600}
+textarea{width:100%;height:220px;font:13px ui-monospace,Menlo,Consolas,monospace;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:15px}td,th{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top}
+footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<header class="hero"><div class="in">
+  <a class="back" href="./">← Retour à l’appli</a>
+  <h1>Créer un groupe</h1>
+  <p class="tag">Ton groupe a son propre Google Sheet. L’appli est la même pour tous, mais personne d’autre ne voit tes données.</p>
+</div></header>
+
+<main class="wrap">
+
+<div class="step" style="margin-top:28px">
+  <h2>Avant de commencer</h2>
+  <ul>
+    <li><b>Une personne organise</b> : elle crée le Sheet avec son compte Google (gratuit). Les autres n’ont rien à créer, juste à ouvrir un lien.</li>
+    <li><b>Un ordinateur</b> pour cette installation (15 minutes, une seule fois). Ensuite, tout se fait sur téléphone.</li>
+    <li><b>Qui voit quoi ?</b> Les matchs sont enregistrés dans ton Sheet, sur ton Google Drive. L’auteur de cette appli n’y a aucun accès et ne reçoit aucune donnée de ton groupe.</li>
+  </ul>
+</div>
+
+<div class="step"><span class="n">1</span>
+  <h2>Crée le Sheet</h2>
+  <ol>
+    <li>Connecte-toi à ton compte Google, puis ouvre <a href="https://sheets.new" rel="noopener noreferrer" target="_blank">sheets.new</a> : un tableur vide s’ouvre.</li>
+    <li>Donne-lui un nom, par exemple « Barniotte de l’équipe ».</li>
+  </ol>
+  <p class="warn"><b>Garde ce Sheet privé.</b> Ne le partage pas par lien et ne l’ouvre pas à d’autres personnes : l’appli passe par un script, pas par un accès direct au Sheet.</p>
+</div>
+
+<div class="step"><span class="n">2</span>
+  <h2>Génère le code d’accès</h2>
+  <p>Ce code protège les données de ton groupe : sans lui, ni l’appli ni personne ne peut lire ou écrire dans ton Sheet. Il est créé ici, dans ton navigateur, et n’est envoyé nulle part.</p>
+  <div class="row"><button class="primary" id="gen">Générer mon code</button></div>
+  <span class="out" id="code" hidden></span>
+  <details><summary>J’ai déjà un code (mise à jour du script)</summary>
+    <p class="hint">Pour mettre à jour le script d’un groupe existant sans changer de code : saisis ton code actuel (16 caractères minimum, lettres, chiffres et tirets).</p>
+    <input type="text" id="own-code" placeholder="ton code actuel" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="Code existant">
+    <div class="row"><button id="use-own">Utiliser ce code</button></div>
+    <p id="own-msg" aria-live="polite"></p>
+  </details>
+  <p class="note">Garde ce code dans un endroit sûr (gestionnaire de mots de passe, par exemple). Tu en auras besoin à l’étape 3, à l’étape 6 et pour changer ou mettre à jour le script plus tard. Si tu rouvres cette page, il faudra en générer un autre : n’utilise que celui que tu as collé dans le script.</p>
+</div>
+
+<div class="step"><span class="n">3</span>
+  <h2>Colle le script dans le Sheet</h2>
+  <ol>
+    <li>Dans le Sheet, clique sur <b class="ui">Extensions</b>, puis <b class="ui">Apps Script</b>. Un nouvel onglet s’ouvre.</li>
+    <li>Dans l’éditeur, sélectionne tout le code qui s’y trouve (Ctrl+A) et supprime-le.</li>
+    <li>Reviens ici, clique sur le bouton ci-dessous, puis colle dans l’éditeur (Ctrl+V).</li>
+    <li>Clique sur l’icône disquette <b class="ui">Enregistrer</b>.</li>
+  </ol>
+  <div class="row"><button class="primary" id="copy-script" disabled>Copier le script avec mon code</button></div>
+  <p id="copy-msg" class="hint" aria-live="polite"></p>
+  <p class="hint">Le bouton se débloque dès que ton code est généré (étape 2). Le script contient déjà ton code.</p>
+  <details><summary>Voir le script (version 3)</summary>
+    <p class="hint">Rien de caché : tu peux le relire. Il lit et écrit uniquement dans ce Sheet (4 onglets : Joueurs, Saisons, Matchs, Journal) et ne contacte aucun autre service.</p>
+    <textarea id="script-view" readonly spellcheck="false"></textarea>
+  </details>
+</div>
+
+<div class="step"><span class="n">4</span>
+  <h2>Installe les onglets</h2>
+  <ol>
+    <li>En haut de l’éditeur Apps Script, dans la liste à côté de <b class="ui">Exécuter</b>, choisis <b class="ui">installer</b>.</li>
+    <li>Clique sur <b class="ui">Exécuter</b>.</li>
+    <li>Google demande une autorisation : <b class="ui">Examiner les autorisations</b>, choisis ton compte, puis <b class="ui">Paramètres avancés</b>, <b class="ui">Accéder à … (non sécurisé)</b> et <b class="ui">Autoriser</b>.</li>
+    <li>Reviens dans le Sheet : il contient maintenant 4 onglets (Joueurs, Saisons, Matchs, Journal).</li>
+  </ol>
+  <p class="note">L’avertissement « Google n’a pas validé cette application » est normal : c’est ton propre script, que Google n’a pas examiné. Le script ne demande que l’accès à ce Sheet.</p>
+</div>
+
+<div class="step"><span class="n">5</span>
+  <h2>Publie le script</h2>
+  <ol>
+    <li>Dans l’éditeur Apps Script, clique sur <b class="ui">Déployer</b> (en haut à droite), puis <b class="ui">Nouveau déploiement</b>.</li>
+    <li>Clique sur la roue dentée à côté de « Sélectionner le type », puis choisis <b class="ui">Application Web</b>.</li>
+    <li><b class="ui">Exécuter en tant que</b> : <b>Moi</b>.</li>
+    <li><b class="ui">Qui a accès</b> : <b>Tout le monde</b>.</li>
+    <li>Clique sur <b class="ui">Déployer</b>, autorise si Google le redemande, puis copie l’<b>URL de l’application Web</b> (elle finit par <code>/exec</code>).</li>
+  </ol>
+  <p class="warn"><b>« Tout le monde », pas « Tout le monde avec un compte Google ».</b> Avec le second choix, l’appli affiche « Impossible de joindre le serveur » sur les téléphones. « Tout le monde » ne veut pas dire que tout le monde peut lire tes données : sans le code d’accès, le script ne répond rien.</p>
+</div>
+
+<div class="step"><span class="n">6</span>
+  <h2>Crée le lien d’invitation</h2>
+  <p>Colle ici l’URL copiée à l’étape 5. Le lien d’invitation contient l’adresse de ton script et ton code : c’est ce qui permet aux joueurs de rejoindre ton groupe en un clic.</p>
+  <input type="text" id="api" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="URL du script">
+  <p id="api-msg" aria-live="polite"></p>
+  <span class="out" id="invite" hidden></span>
+  <div class="row"><button class="primary" id="copy-invite" disabled>Copier le lien d’invitation</button><a class="btn" id="open-invite" href="#" rel="noopener noreferrer" target="_blank" hidden>Tester le lien</a></div>
+  <p class="warn"><b>Ce lien est la clé de ton groupe.</b> Envoie-le seulement aux joueurs, par message privé. Ne le publie pas. Si quelqu’un d’extérieur l’obtient, change le code (voir « Entretien » plus bas).</p>
+</div>
+
+<div class="step"><span class="n">7</span>
+  <h2>Lance ta première saison</h2>
+  <ol>
+    <li>Ouvre le lien d’invitation sur ton téléphone ou ton ordinateur, puis confirme <b class="ui">Rejoindre</b>.</li>
+    <li>Va dans l’onglet <b class="ui">Saison</b> : ajoute les joueurs un par un.</li>
+    <li>Toujours dans cet onglet, choisis les joueurs classés, le nombre de matchs par duo, puis clique sur <b class="ui">Ouvrir la saison</b>.</li>
+    <li>Choisis ton nom quand l’appli demande « Qui es-tu ? ». C’est le bouton <b class="ui">+</b> qui lance un match.</li>
+    <li>Envoie le lien d’invitation aux autres joueurs. Pour que l’appli reste sur l’écran d’accueil : sur iPhone, bouton Partager de Safari puis « Sur l’écran d’accueil » ; sur Android, menu ⋮ de Chrome puis « Ajouter à l’écran d’accueil ».</li>
+  </ol>
+  <p class="note">Les règles de l’appli sont celles de la Barniote : le premier à 7 points gagne, il n’y a pas de match nul. Le bouton <b class="ui">Règles</b> de l’onglet Saison ouvre le texte complet.</p>
+</div>
+
+<div class="step">
+  <h2>Sauvegarde automatique (facultatif)</h2>
+  <p>Ton Sheet garde déjà l’historique des versions de Google. Pour une copie de plus, ce petit script ajoute une copie du Sheet chaque semaine dans ton Drive et ne garde que les 4 dernières.</p>
+  <div class="warn">Il demande une autorisation de plus : l’accès à ton Google Drive. Le script ne touche qu’à son propre dossier « Barniotte - Sauvegardes », mais comme Google ne propose pas d’autorisation plus étroite, la fenêtre parle de « supprimer des fichiers ». Si cela ne te convient pas, saute cette étape.</div>
+  <ol>
+    <li>Dans l’éditeur Apps Script, clique sur <b class="ui">+</b> à côté de « Fichiers », puis <b class="ui">Script</b>, et nomme-le « Sauvegarde ».</li>
+    <li>Supprime son contenu, puis colle le script ci-dessous et enregistre.</li>
+    <li>Choisis <b class="ui">activerSauvegardeHebdo</b> dans la liste, puis <b class="ui">Exécuter</b>, et autorise.</li>
+  </ol>
+  <div class="row"><button id="copy-backup">Copier le script de sauvegarde</button></div>
+  <p id="backup-msg" class="hint" aria-live="polite"></p>
+</div>
+
+<div class="step">
+  <h2>Entretien</h2>
+  <table>
+    <tr><th>Je veux…</th><th>Je fais…</th></tr>
+    <tr><td>Changer le code d’accès</td><td>Génère un nouveau code (étape 2), remplace-le dans la ligne <code>const CODE = '…'</code> du script, enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Envoie le nouveau lien d’invitation : chacun saisit ou ouvre le nouveau lien une fois.</td></tr>
+    <tr><td>Mettre à jour le script</td><td>Quand l’appli indique dans l’onglet Saison que le script du groupe n’est pas à jour, reviens sur cette page. À l’étape 2, ouvre « J’ai déjà un code » et saisis ton code actuel, puis fais l’étape 3. Ensuite, la <b>Nouvelle version</b> du déploiement (comme ci-dessus). L’adresse du script ne change pas : les liens déjà envoyés fonctionnent toujours.</td></tr>
+    <tr><td>Ajouter ou retirer un joueur</td><td>Dans l’appli, onglet Saison, section Joueurs. Un joueur ajouté joue à partir de la saison suivante.</td></tr>
+    <tr><td>Corriger un match</td><td>Dans l’appli : onglet Matchs, ouvre le match. Les corrections sont notées dans le journal.</td></tr>
+    <tr><td>Supprimer un match de test</td><td>Dans le Sheet, onglet Matchs, remplace <code>termine</code> par <code>annule</code> dans la colonne statut.</td></tr>
+  </table>
+  <div class="note">N’efface pas, ne renomme pas et ne déplace pas les colonnes ni les onglets du Sheet : l’appli ne s’y retrouverait plus. Tu peux le consulter ou ajouter des colonnes à droite.</div>
+</div>
+
+<div class="step">
+  <h2>Ça ne marche pas ?</h2>
+  <table>
+    <tr><th>Message</th><th>Cause probable</th></tr>
+    <tr><td>« Impossible de joindre le serveur »</td><td>Le déploiement n’est pas sur « Tout le monde » (étape 5), ou l’appareil n’a pas de réseau. Après correction, recharge l’appli (Ctrl+F5 sur ordinateur).</td></tr>
+    <tr><td>« Code refusé »</td><td>Le code saisi n’est pas celui de la ligne <code>const CODE</code> du script. Vérifie qu’il n’y a pas d’espace avant ou après.</td></tr>
+    <tr><td>« Ce lien ne mène pas à un groupe Barniotte »</td><td>L’URL du script est incomplète ou le script n’est pas publié. Ouvre l’URL dans un navigateur : tu dois voir <code>{"ok":true,"service":"Barniotte"…}</code>.</td></tr>
+    <tr><td>Rien ne s’enregistre dans le Sheet</td><td>L’étape 4 (<b>installer</b>) n’a pas été lancée, ou un onglet a été renommé.</td></tr>
+    <tr><td>Une ancienne version s’affiche</td><td>Ferme complètement l’appli et rouvre-la. Sur ordinateur, Ctrl+F5.</td></tr>
+    <tr><td>Une erreur d’exécution dans Apps Script</td><td>Le texte du code a pu être mal collé. Recommence l’étape 3 en supprimant bien tout l’ancien contenu.</td></tr>
+  </table>
+</div>
+
+<footer>
+  Les données de chaque groupe restent dans son propre Google Sheet. Cette page fonctionne entièrement dans ton navigateur : elle n’envoie aucune information. · <a href="regles.html">Règles de la Barniote</a> · <a href="./">Retour à l’appli</a>
+</footer>
+</main>
+
+<script type="text/plain" id="tpl-script">/**
+ * Barniotte : serveur de l'application.
+ * Ce script est lié au Google Sheet de ton groupe.
+ *
+ * Mise en service : lancer la fonction installer() une fois, puis déployer en application web
+ * (Exécuter en tant que : moi, Accès : tout le monde). Le code d'accès ci-dessous protège l'écriture et la lecture.
+ *
+ * @OnlyCurrentDoc
+ */
+
+const CODE = '__CODE__';
+const SCRIPT_VERSION = 3;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
+const MAX_BODY = 400000;    // taille maximale d'une requête (caractères)
+
+const TABS = {
+  Joueurs: { cols: ['nom', 'actif', 'couleur'], text: [1, 2], widths: [120, 70, 80] },
+  Saisons: { cols: ['id', 'nom', 'debut', 'fin', 'statut', 'quota', 'joueurs'], text: [1, 2, 3, 4, 5, 7], widths: [50, 130, 100, 100, 90, 60, 280] },
+  Matchs: { cols: ['id', 'saison', 'horodatage', 'joueur_a', 'joueur_b', 'score_a', 'score_b', 'statut', 'coups', 'saisi_par', 'modifie_le'], text: [1, 2, 3, 4, 5, 8, 9, 10, 11], widths: [70, 60, 150, 90, 90, 70, 70, 90, 220, 90, 150] },
+  Journal: { cols: ['horodatage', 'par', 'match', 'texte'], text: [1, 2, 3, 4], widths: [150, 90, 70, 620] }
+};
+const STATUTS = ['en_cours', 'termine', 'annule'];
+const ISO = "yyyy-MM-dd'T'HH:mm:ss";
+
+/* Aucune donnée de départ : les joueurs et la saison se créent dans l'appli. */
+const SEED = {
+  joueurs: [],
+  saisons: [],
+  matchs: [],
+  journal: []
+};
+
+/* ---------- Installation (à lancer une seule fois) ---------- */
+
+function installer() {
+  if (codeFaible_()) throw new Error('Le code d’accès (ligne « const CODE ») n’a pas été personnalisé ou est trop court : il faut au moins 16 caractères.');
+  const ss = SpreadsheetApp.getActive();
+  Object.keys(TABS).forEach(function (name) {
+    let sh = ss.getSheetByName(name);
+    if (!sh) sh = ss.insertSheet(name);
+    prepare_(sh, TABS[name]);
+  });
+  ss.getSheets().forEach(function (sh) {
+    if (!TABS[sh.getName()] && /^(Feuille|Sheet)\s?\d+$/.test(sh.getName()) && sh.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh);
+  });
+  const n = {
+    Joueurs: seedIfEmpty_('Joueurs', SEED.joueurs),
+    Saisons: seedIfEmpty_('Saisons', SEED.saisons),
+    Matchs: seedIfEmpty_('Matchs', SEED.matchs),
+    Journal: seedIfEmpty_('Journal', SEED.journal)
+  };
+  Logger.log('Installation terminée. Lignes importées : ' + JSON.stringify(n));
+  try { ss.toast('Installation terminée. Il reste à déployer l’application web.', 'Barniotte', 8); } catch (e) { /* sans interface */ }
+  return n;
+}
+
+function colFormats_(def) {
+  return def.cols.map(function (c, i) { return def.text.indexOf(i + 1) >= 0 ? '@' : '0'; });
+}
+
+function prepare_(sh, def) {
+  const head = sh.getRange(1, 1, 1, def.cols.length);
+  head.setNumberFormats([def.cols.map(function () { return '@'; })]);
+  head.setValues([def.cols]);
+  head.setBackground('#1E6B50');
+  head.setFontColor('#FFFFFF');
+  head.setFontWeight('bold');
+  sh.setFrozenRows(1);
+  const fm = colFormats_(def);
+  const rows = Math.max(1, sh.getMaxRows() - 1);
+  fm.forEach(function (f, i) { sh.getRange(2, i + 1, rows, 1).setNumberFormat(f); });
+  def.widths.forEach(function (w, i) { sh.setColumnWidth(i + 1, w); });
+}
+
+function seedIfEmpty_(name, rows) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  if (!rows || !rows.length || sh.getLastRow() >= 2) return 0;
+  sh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  return rows.length;
+}
+
+/* ---------- Point d'entrée web ---------- */
+
+function doGet() {
+  return out_({ ok: true, service: 'Barniotte', version: SCRIPT_VERSION });
+}
+
+/* Un code trop court ou jamais personnalisé ne doit jamais protéger des données. */
+function codeFaible_() {
+  return typeof CODE !== 'string' || CODE.length < 16 || CODE.indexOf('__') >= 0;
+}
+
+function doPost(e) {
+  let req;
+  if (codeFaible_()) return out_({ ok: false, error: 'code_faible' });
+  try {
+    const body = e.postData.contents;
+    if (body.length > MAX_BODY) return out_({ ok: false, error: 'requete trop grande' });
+    req = JSON.parse(body);
+  } catch (err) { return out_({ ok: false, error: 'requete' }); }
+  if (!req || typeof req.code !== 'string' || req.code !== CODE) {
+    // Pas d'attente artificielle : le code est assez long pour résister à l'essai systématique, et une attente ferait perdre du temps de calcul à qui spamme l'adresse.
+    return out_({ ok: false, error: 'code', service: 'Barniotte' });
+  }
+  try {
+    if (req.action === 'ping') return out_({ ok: true, service: 'Barniotte', version: SCRIPT_VERSION });
+    if (req.action === 'sync') return out_(sync_(req.since));
+    if (req.action === 'apply') return out_(apply_(req.ops || []));
+    return out_({ ok: false, error: 'action' });
+  } catch (err) {
+    return out_({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
+function out_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* Une modification faite à la main dans le Sheet fait avancer la version, pour que les téléphones la voient. */
+function onEdit() {
+  try { bumpRev_(); } catch (e) { /* ignoré */ }
+}
+
+function bumpRev_() {
+  const p = PropertiesService.getScriptProperties();
+  const rev = Number(p.getProperty('rev') || 0) + 1;
+  p.setProperty('rev', String(rev));
+  return rev;
+}
+
+function getRev_() {
+  return Number(PropertiesService.getScriptProperties().getProperty('rev') || 0);
+}
+
+/* ---------- Lecture ---------- */
+
+function sync_(since) {
+  const rev = getRev_();
+  if (since != null && Number(since) === rev) return { ok: true, rev: rev, version: SCRIPT_VERSION, unchanged: true };
+  return { ok: true, rev: rev, version: SCRIPT_VERSION, state: readState_() };
+}
+
+function tz_() { return SpreadsheetApp.getActive().getSpreadsheetTimeZone(); }
+
+function text_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), ISO);
+  return v == null ? '' : String(v).trim();
+}
+
+function day_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
+  return v == null ? '' : String(v).trim();
+}
+
+function num_(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return isFinite(n) ? n : null;
+}
+
+function readTab_(name) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  if (!sh) throw new Error('Onglet manquant : ' + name + '. Lance la fonction installer().');
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, TABS[name].cols.length).getValues();
+}
+
+function readState_() {
+  const players = readTab_('Joueurs').filter(function (r) { return text_(r[0]); }).map(function (r) {
+    return { name: text_(r[0]), active: ['oui', 'true', '1'].indexOf(text_(r[1]).toLowerCase()) >= 0, c: num_(r[2]) == null ? 0 : num_(r[2]) };
+  });
+  const seasons = readTab_('Saisons').filter(function (r) { return text_(r[0]); }).map(function (r) {
+    return {
+      id: Number(text_(r[0])), name: text_(r[1]), start: day_(r[2]), end: day_(r[3]) || null, status: text_(r[4]),
+      quota: num_(r[5]) || 1, players: text_(r[6]).split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+    };
+  });
+  const matches = readTab_('Matchs').filter(function (r) { return text_(r[0]); }).map(function (r) {
+    return {
+      id: text_(r[0]), season: Number(text_(r[1])), ts: text_(r[2]), a: text_(r[3]), b: text_(r[4]),
+      sa: num_(r[5]), sb: num_(r[6]), status: text_(r[7]),
+      mods: text_(r[8]).split(';').map(function (s) { return s.trim(); }).filter(Boolean), by: text_(r[9]), mod: text_(r[10])
+    };
+  });
+  const log = readTab_('Journal').filter(function (r) { return text_(r[0]) || text_(r[3]); }).map(function (r) {
+    return { ts: text_(r[0]), by: text_(r[1]), match: text_(r[2]) || null, what: text_(r[3]) };
+  });
+  return { players: players, seasons: seasons, matches: matches, log: log };
+}
+
+/* ---------- Écriture ---------- */
+
+/* Texte sûr : chaîne courte, sans caractère de contrôle. */
+function txt_(v, max, vide) {
+  if (v == null || v === '') return !!vide;
+  // Pas de caractère de contrôle, et rien qui commence comme une formule (=, +, -, @) : défense en plus du format texte des colonnes.
+  return typeof v === 'string' && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v) && !/^[=+\-@]/.test(v);
+}
+function liste_(a, nbMax, max) {
+  return a == null || (Array.isArray(a) && a.length <= nbMax && a.every(function (x) { return txt_(x, max, false); }));
+}
+
+function checkOp_(op) {
+  if (!op || typeof op !== 'object') return 'opération invalide';
+  const r = op.row;
+  switch (op.t) {
+    case 'match': {
+      if (!r || !r.id || !r.a || !r.b || r.a === r.b) return 'match incomplet';
+      if (!txt_(r.id, 40) || !txt_(r.a, 40) || !txt_(r.b, 40) || !txt_(r.by, 40, true)) return 'texte invalide';
+      if (STATUTS.indexOf(r.status) < 0) return 'statut de match inconnu';
+      if (!isFinite(Number(r.season))) return 'saison invalide';
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(String(r.ts || ''))) return 'horodatage invalide';
+      if (r.mods != null && !Array.isArray(r.mods)) return 'coups invalides';
+      if (!liste_(r.mods, 8, 60)) return 'coups invalides';
+      if (r.status === 'termine') {
+        const sa = r.sa, sb = r.sb;
+        if (!Number.isInteger(sa) || !Number.isInteger(sb) || sa < 0 || sb < 0 || Math.max(sa, sb) !== 7 || sa === sb) return 'score invalide : ' + sa + '-' + sb;
+      }
+      return null;
+    }
+    case 'season':
+      if (!r || r.id == null || !r.name) return 'saison incomplète';
+      if (!txt_(String(r.id), 20) || !txt_(r.name, 60) || !txt_(r.start, 10, true) || !txt_(r.end, 10, true) || !txt_(r.status, 20, true) || !liste_(r.players, 40, 40)) return 'texte invalide';
+      if (r.quota != null && !(Number.isInteger(Number(r.quota)) && Number(r.quota) >= 1 && Number(r.quota) <= 500)) return 'quota invalide';
+      return null;
+    case 'player':
+      if (!r || !r.name) return 'joueur incomplet';
+      return txt_(r.name, 40) ? null : 'nom de joueur invalide';
+    case 'playerDel':
+      if (!op.name) return 'joueur incomplet';
+      return txt_(op.name, 40) ? null : 'nom de joueur invalide';
+    case 'log':
+      if (!r || !r.ts || !r.what) return 'journal incomplet';
+      return txt_(r.ts, 30) && txt_(r.what, 600) && txt_(r.by, 40, true) && (r.match == null || txt_(String(r.match), 40, true)) ? null : 'texte invalide';
+  }
+  return 'opération inconnue';
+}
+
+function apply_(ops) {
+  if (!Array.isArray(ops) || ops.length > 200) throw new Error('trop d’opérations');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    for (let i = 0; i < ops.length; i++) {
+      const e = checkOp_(ops[i]);
+      if (e) throw new Error('Opération ' + (i + 1) + ' : ' + e);
+    }
+    const now = Utilities.formatDate(new Date(), tz_(), ISO);
+    ops.forEach(function (op) { applyOp_(op, now); });
+    const rev = bumpRev_();
+    return { ok: true, rev: rev, state: readState_() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sheet_(name) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(name);
+  if (!sh) throw new Error('Onglet manquant : ' + name + '. Lance la fonction installer().');
+  return sh;
+}
+
+/* Numéro de ligne (à partir de 2) dont la colonne indiquée vaut la clé, ou 0. */
+function find_(sh, col, key) {
+  const last = sh.getLastRow();
+  if (last < 2) return 0;
+  const vals = sh.getRange(2, col, last - 1, 1).getValues();
+  for (let i = 0; i < vals.length; i++) if (text_(vals[i][0]) === String(key)) return i + 2;
+  return 0;
+}
+
+function put_(sh, name, row, at) {
+  const def = TABS[name];
+  const rg = sh.getRange(at, 1, 1, def.cols.length);
+  rg.setNumberFormats([colFormats_(def)]);
+  rg.setValues([row]);
+}
+
+/* Nouvelle ligne tout en haut, juste sous l'en-tête : le plus récent d'abord, comme dans la fiche d'origine. */
+function insertTop_(sh, name, row) {
+  sh.insertRowBefore(2);
+  sh.getRange(2, 1, 1, TABS[name].cols.length).clearFormat();
+  put_(sh, name, row, 2);
+}
+
+function append_(sh, name, row) {
+  put_(sh, name, row, Math.max(2, sh.getLastRow() + 1));
+}
+
+function applyOp_(op, now) {
+  const r = op.row;
+  if (op.t === 'match') {
+    const sh = sheet_('Matchs');
+    const at = find_(sh, 1, r.id);
+    const row = [String(r.id), String(r.season), r.ts, r.a, r.b, r.sa == null ? '' : r.sa, r.sb == null ? '' : r.sb,
+      r.status, (r.mods || []).join('; '), r.by || '', at ? now : ''];
+    if (at) put_(sh, 'Matchs', row, at); else insertTop_(sh, 'Matchs', row);
+  } else if (op.t === 'season') {
+    const sh = sheet_('Saisons');
+    const at = find_(sh, 1, r.id);
+    const row = [String(r.id), r.name, r.start || '', r.end || '', r.status || 'en_cours', Number(r.quota) || 1, (r.players || []).join(', ')];
+    if (at) put_(sh, 'Saisons', row, at); else append_(sh, 'Saisons', row);
+  } else if (op.t === 'player') {
+    const sh = sheet_('Joueurs');
+    const at = find_(sh, 1, r.name);
+    const row = [r.name, r.active ? 'oui' : 'non', Number(r.c) || 0];
+    if (at) put_(sh, 'Joueurs', row, at); else append_(sh, 'Joueurs', row);
+  } else if (op.t === 'playerDel') {
+    const sh = sheet_('Joueurs');
+    const at = find_(sh, 1, op.name);
+    if (at) sh.deleteRow(at);
+  } else if (op.t === 'log') {
+    insertTop_(sheet_('Journal'), 'Journal', [r.ts, r.by || '', r.match == null ? '' : String(r.match), r.what]);
+  }
+}
+</script>
+<script type="text/plain" id="tpl-backup">/* ---------- Sauvegarde automatique (une copie par semaine, les 4 dernières conservées) ---------- */
+
+const NB_SAUVEGARDES = 4;
+const DOSSIER_SAUVEGARDES = 'Barniotte - Sauvegardes';
+const PREFIXE_SAUVEGARDE = 'Sauvegarde Barniotte ';
+
+/* À lancer une seule fois : programme la copie du dimanche vers 3 h et fait une première copie tout de suite. */
+function activerSauvegardeHebdo() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sauvegarder') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sauvegarder').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  sauvegarder();
+}
+
+function sauvegarder() {
+  const ss = SpreadsheetApp.getActive();
+  const dossiers = DriveApp.getFoldersByName(DOSSIER_SAUVEGARDES);
+  const dossier = dossiers.hasNext() ? dossiers.next() : DriveApp.createFolder(DOSSIER_SAUVEGARDES);
+  const horo = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd_HH-mm');
+  DriveApp.getFileById(ss.getId()).makeCopy(PREFIXE_SAUVEGARDE + horo, dossier);
+  // Ménage : on ne touche qu'aux copies de ce dossier, créées par ce script. Elles vont à la corbeille (récupérables 30 jours).
+  const copies = [];
+  const fichiers = dossier.getFiles();
+  while (fichiers.hasNext()) {
+    const f = fichiers.next();
+    if (f.getName().indexOf(PREFIXE_SAUVEGARDE) === 0) copies.push(f);
+  }
+  copies.sort(function (a, b) { return b.getDateCreated().getTime() - a.getDateCreated().getTime(); });
+  copies.slice(NB_SAUVEGARDES).forEach(function (f) { f.setTrashed(true); });
+}
+</script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var tpl = $('tpl-script').textContent.replace(/^\n/, '');
+  var backup = $('tpl-backup').textContent.replace(/^\n/, '');
+  var code = '';
+  var ALPHA = 'abcdefghjkmnpqrstuvwxyz23456789';
+
+  function newCode() {
+    var buf = new Uint32Array(16), out = [];
+    crypto.getRandomValues(buf);
+    for (var i = 0; i < 16; i++) out.push(ALPHA.charAt(buf[i] % ALPHA.length));
+    return 'barn-' + [0, 4, 8, 12].map(function (k) { return out.slice(k, k + 4).join(''); }).join('-');
+  }
+  function script() { return tpl.replace("'__CODE__'", "'" + code + "'"); }
+
+  function copy(text, msgEl, okText) {
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var done = false;
+      try { done = document.execCommand('copy'); } catch (e) { done = false; }
+      document.body.removeChild(ta);
+      msgEl.textContent = done ? okText : 'La copie automatique a échoué : sélectionne le texte à la main dans la zone « Voir le script ».';
+      msgEl.className = done ? 'ok' : 'err';
+    }
+    try { navigator.clipboard.writeText(text).then(function () { msgEl.textContent = okText; msgEl.className = 'ok'; }, fallback); } catch (e) { fallback(); }
+  }
+
+  function setCode(c) {
+    code = c;
+    $('code').hidden = false; $('code').textContent = code;
+    $('copy-script').disabled = false;
+    $('script-view').value = script();
+    $('gen').textContent = 'Générer un autre code';
+    refreshInvite();
+  }
+  $('gen').addEventListener('click', function () {
+    if (code && !confirm('Un code existe déjà. En générer un nouveau remplacera celui-ci : à ne faire que si tu n’as encore rien collé dans le script. Continuer ?')) return;
+    $('own-msg').textContent = '';
+    setCode(newCode());
+  });
+  $('use-own').addEventListener('click', function () {
+    var v = $('own-code').value.trim(), m = $('own-msg');
+    if (!/^[A-Za-z0-9-]{16,64}$/.test(v)) { m.className = 'err'; m.textContent = 'Ce code n’est pas valide : 16 à 64 caractères, lettres, chiffres et tirets seulement.'; return; }
+    m.className = 'ok'; m.textContent = 'Code pris en compte.';
+    setCode(v);
+  });
+  $('copy-script').addEventListener('click', function () { copy(script(), $('copy-msg'), 'Script copié. Colle-le dans l’éditeur Apps Script (Ctrl+V).'); });
+  $('copy-backup').addEventListener('click', function () { copy(backup, $('backup-msg'), 'Script de sauvegarde copié.'); });
+
+  var API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
+  var base = location.href.replace(/[#?].*$/, '').replace(/[^\/]*$/, '');
+  var invite = '';
+  function refreshInvite() {
+    var v = $('api').value.trim(), msg = $('api-msg');
+    invite = ''; $('invite').hidden = true; $('copy-invite').disabled = true; $('open-invite').hidden = true;
+    if (!v) { msg.textContent = ''; return; }
+    if (!API_RE.test(v)) {
+      msg.className = 'err';
+      msg.textContent = /\/dev(\?|$)/.test(v) ? 'Cette adresse finit par /dev : utilise celle du déploiement, qui finit par /exec.' : 'Cette adresse n’est pas valide : elle doit commencer par https://script.google.com/macros/s/ et finir par /exec.';
+      return;
+    }
+    if (!code) { msg.className = 'err'; msg.textContent = 'Génère d’abord ton code d’accès (étape 2).'; return; }
+    invite = base + '#api=' + encodeURIComponent(v) + '&code=' + encodeURIComponent(code);
+    msg.className = 'ok'; msg.textContent = 'Adresse valide.';
+    $('invite').hidden = false; $('invite').textContent = invite;
+    $('copy-invite').disabled = false;
+    $('open-invite').hidden = false; $('open-invite').href = invite;
+  }
+  $('api').addEventListener('input', refreshInvite);
+  $('copy-invite').addEventListener('click', function () {
+    var m = $('api-msg');
+    copy(invite, m, 'Lien d’invitation copié. Envoie-le aux joueurs par message privé.');
+  });
+})();
+</script>
+</body>
+</html>
