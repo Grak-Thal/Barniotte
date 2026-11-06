@@ -217,6 +217,18 @@ input[type="text"] { width: 100%; border: 1px solid var(--line); background: var
 .netline.sync .nd, .netline.idle .nd, .netline.pending .nd { background: var(--gold); }
 .netline.offline .nd, .netline.error .nd, .netline.locked .nd { background: var(--danger); }
 
+/* Podium de fin de saison */
+.podium { display: grid; gap: 10px; margin: 12px 0; }
+.pod { display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--surface); }
+.pod .pl { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font: 700 22px var(--f-display); color: #1b1b1b; }
+.pod.gold .pl { background: #E2BE5C; }
+.pod.silver .pl { background: #C4CBCF; }
+.pod.bronze .pl { background: #C98E5B; }
+.pod.gold { border-color: #E2BE5C; }
+.pod .pn { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font: 700 22px/1.1 var(--f-display); letter-spacing: .02em; text-transform: uppercase; }
+.pod .aux { margin-top: 4px; font-size: 14px; color: var(--accent); font-weight: 600; }
+.podium-sub { font-weight: 600; margin: 0; }
+
 </style>
 
 </head>
@@ -354,6 +366,12 @@ const Core = (() => {
     };
     const rows = Object.values(st).sort(cmp);
     const same = (x, y) => x.J === y.J && x.V === y.V && x.pts === y.pts;
+    /* Même % de victoires mais place décidée aux points marqués : on le signale sur le joueur placé devant. */
+    const egalPct = (x, y) => x.J > 0 && y.J > 0 && x.V * y.J === y.V * x.J;
+    rows.forEach((r, i) => {
+      const nx = rows[i + 1];
+      r.aux = nx && egalPct(r, nx) && r.pts * nx.J !== nx.pts * r.J ? { over: nx.name, pts: r.pts, other: nx.pts, sameJ: r.J === nx.J } : null;
+    });
     rows.forEach((r, i) => { r.tie = (i > 0 && same(r, rows[i - 1])) || (i < rows.length - 1 && same(r, rows[i + 1])); });
     const complete = total > 0 && pairs.every(p => p.n >= season.quota);
     const tiedFirst = rows.length > 1 && same(rows[0], rows[1]);
@@ -715,14 +733,14 @@ const Core = (() => {
       card.append(h('div', { class: 'rk' },
         h('span', { class: 'n' }, String(i + 1)),
         h('div', { style: 'min-width:0' },
-          h('div', { class: 'nm' }, h('i', { class: 'dot', style: 'background:' + colorOf(r.name) }), h('span', { class: 't' }, r.name), S.complete && r.tie ? h('span', { class: 'tag' }, 'ex æquo') : null),
+          h('div', { class: 'nm' }, h('i', { class: 'dot', style: 'background:' + colorOf(r.name) }), h('span', { class: 't' }, r.name), S.complete && r.tie ? h('span', { class: 'tag' }, 'ex æquo') : null, r.aux ? h('span', { class: 'tag', title: 'À égalité de victoires, départagé aux points marqués' }, 'aux points') : null),
           h('div', { class: 'form', 'aria-label': 'Derniers résultats' }, r.form.slice(-5).map(f => h('i', { class: f === 'V' ? '' : 'd' })))),
         h('span', { class: 'num' }, String(r.J)), h('span', { class: 'num' }, String(r.V)),
         h('span', { class: 'num big' }, pct(r.V, r.J)), h('span', { class: 'num' }, String(r.pts)), h('span', { class: 'num' }, String(r.rest))));
     });
     card.append(h('p', { class: 'hint', style: 'margin-top:10px' },
       S.complete
-        ? 'Classement final : victoires, puis total de points marqués.'
+        ? 'Classement final : victoires, puis total de points marqués. « Aux points » : à égalité de victoires, place gagnée au total de points marqués.'
         : 'Classement provisoire, trié au % de victoires car tout le monde n’a pas joué autant. Égalité : total de points marqués. J matchs joués, V victoires, Pts points marqués, Rest. matchs restants.'));
     out.append(card);
     const svg = chartSVG(S);
@@ -793,8 +811,53 @@ const Core = (() => {
         h('button', { type: 'button', class: 'btn primary', onclick: () => {
           s.status = 'archivee'; s.end = nowIso().slice(0, 10);
           state.matches.forEach(m => { if (m.season === s.id && m.status === 'en_cours') m.status = 'annule'; });
-          logEntry(s.name + ' clôturée', null); commit(); sh.close(); toast(s.name + ' archivée.'); location.hash = 'classement';
+          logEntry(s.name + ' clôturée', null); commit(); sh.close(); toast(s.name + ' archivée.'); location.hash = 'classement'; checkPodium();
         } }, S.complete ? 'Clôturer la saison' : 'Clôturer quand même')));
+  }
+
+  /* ---------- Podium de fin de saison ---------- */
+  const PODIUM_KEY = 'barniotte-podium-vu' + NS;
+  let podiumSeen = null;
+  try { podiumSeen = JSON.parse(lsGet(PODIUM_KEY)); } catch (e) { podiumSeen = null; }
+  const savePodiumSeen = () => lsSet(PODIUM_KEY, JSON.stringify(podiumSeen));
+
+  /* Affiche le podium d'une saison clôturée, une seule fois sur cet appareil. Sans effet si une fenêtre est déjà ouverte : on réessaie à la prochaine mise à jour de l'écran. */
+  function checkPodium() {
+    if (openSh) return;
+    if (API ? !net.loaded : false) return;
+    if (HOSTED && !API) return;
+    const arch = state.seasons.filter(x => x.status === 'archivee');
+    if (!Array.isArray(podiumSeen)) { podiumSeen = arch.map(x => x.id); savePodiumSeen(); return; }
+    const nouveaux = arch.filter(x => !podiumSeen.includes(x.id));
+    if (!nouveaux.length) return;
+    nouveaux.sort((a, b) => String(a.end || '').localeCompare(String(b.end || '')) || (Number(a.id) - Number(b.id)));
+    podiumSeen = podiumSeen.concat(nouveaux.map(x => x.id)); savePodiumSeen();
+    showPodium(nouveaux[nouveaux.length - 1]);
+  }
+
+  function showPodium(s) {
+    const S = standings(state, s);
+    const top = S.rows.filter(r => r.J > 0).slice(0, 3);
+    const sh = openSheet(true);
+    const medals = ['gold', 'silver', 'bronze'], places = ['1er', '2e', '3e'];
+    const sub = S.complete
+      ? (S.champion ? 'Bravo ' + S.champion.name + ' !' : 'Égalité en tête : départage en 3 matchs.')
+      : 'Saison clôturée avant la fin : classement au moment de la clôture.';
+    const list = h('div', { class: 'podium' });
+    top.forEach((r, i) => {
+      const bits = [r.V + ' ' + (r.V > 1 ? 'victoires' : 'victoire') + ' sur ' + plural(r.J, 'match', 'matchs') + ' · ' + pct(r.V, r.J)];
+      list.append(h('div', { class: 'pod ' + medals[i] },
+        h('span', { class: 'pl' }, places[i]),
+        h('div', { class: 'pb' },
+          h('div', { class: 'pn' }, h('i', { class: 'dot', style: 'background:' + colorOf(r.name) }), h('span', {}, r.name), S.complete && r.tie ? h('span', { class: 'tag' }, 'ex æquo') : null),
+          h('div', { class: 'hint' }, bits[0]),
+          r.aux ? h('div', { class: 'aux' }, 'Victoire aux points : devant ' + r.aux.over + (r.aux.sameJ ? ' (' + r.aux.pts + ' points marqués contre ' + r.aux.other + ')' : '') + ' à égalité de victoires.') : null)));
+    });
+    sh.set(h('h2', {}, 'Podium · ' + s.name),
+      h('p', { class: 'podium-sub' }, top.length ? sub : 'Aucun match n’a été joué cette saison.'),
+      list,
+      h('p', { class: 'hint' }, 'Le classement complet et le graphique restent dans « Saisons archivées ».'),
+      h('button', { type: 'button', class: 'btn primary', onclick: () => { sh.close(); render(); } }, 'Fermer'));
   }
 
   function newSeasonForm() {
@@ -932,7 +995,8 @@ const Core = (() => {
       arch.slice().reverse().forEach(a => {
         const S = standings(state, a);
         ac.append(h('details', {}, h('summary', {}, a.name + ' · ' + fmtShort(a.start) + ' → ' + fmtShort(a.end) + (S.rows[0] && S.rows[0].J ? ' · 1er ' + S.rows[0].name : '')),
-          h('div', { class: 'plist', style: 'margin-top:8px' }, S.rows.map((r, i) => h('div', { class: 'row' }, h('span', {}, (i + 1) + '. ' + r.name), h('span', { class: 'hint' }, r.V + ' V sur ' + r.J))))));
+          h('div', { class: 'plist', style: 'margin-top:8px' }, S.rows.map((r, i) => h('div', { class: 'row' }, h('span', {}, (i + 1) + '. ' + r.name + (r.aux ? ' (aux points)' : '')), h('span', { class: 'hint' }, r.V + ' V sur ' + r.J)))),
+          (() => { const sv = chartSVG(S); if (!sv) return null; const c = h('div', { class: 'chart', style: 'margin-top:12px' }, h('div', { class: 'lbl hint' }, '% de victoires au fil des jours de jeu')); c.insertAdjacentHTML('beforeend', sv); return c; })()));
       });
       out.append(ac);
     }
@@ -1230,6 +1294,7 @@ const Core = (() => {
       return;
     }
     document.getElementById('main').replaceChildren(VIEWS[tab]());
+    checkPodium();
   }
 
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { if (currentTab() === b.dataset.tab) { window.scrollTo(0, 0); render(); } else location.hash = b.dataset.tab; }));
