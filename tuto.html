@@ -97,11 +97,13 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
     <li>Reviens ici, clique sur le bouton ci-dessous, puis colle dans l’éditeur (Ctrl+V).</li>
     <li>Clique sur l’icône disquette <b class="ui">Enregistrer</b>.</li>
   </ol>
+  <p><label><input type="checkbox" id="opt-pin"> <b>Activer les codes PIN des joueurs</b> (facultatif)</label></p>
+  <p class="hint">Si tu coches, chaque joueur crée un code à 6 chiffres la première fois qu’il choisit son nom dans l’appli, et le redonne en changeant de téléphone. Cinq essais ratés bloquent le nom 15 minutes. C’est utile si tout le monde ne se connaît pas bien. Tu peux le changer plus tard.</p>
   <div class="row"><button class="primary" id="copy-script" disabled>Copier le script avec mon code</button></div>
   <p id="copy-msg" class="hint" aria-live="polite"></p>
   <p class="hint">Le bouton se débloque dès que ton code est généré (étape 2). Le script contient déjà ton code.</p>
-  <details><summary>Voir le script (version 3)</summary>
-    <p class="hint">Rien de caché : tu peux le relire. Il lit et écrit uniquement dans ce Sheet (4 onglets : Joueurs, Saisons, Matchs, Journal) et ne contacte aucun autre service.</p>
+  <details><summary>Voir le script (version 4)</summary>
+    <p class="hint">Rien de caché : tu peux le relire. Il lit et écrit uniquement dans ce Sheet (4 onglets : Joueurs, Saisons, Matchs, Journal) et ne contacte aucun autre service. Les codes PIN ne sont jamais enregistrés : seule une empreinte l’est, dans les propriétés du script.</p>
     <textarea id="script-view" readonly spellcheck="false"></textarea>
   </details>
 </div>
@@ -170,6 +172,8 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
     <tr><th>Je veux…</th><th>Je fais…</th></tr>
     <tr><td>Changer le code d’accès</td><td>Génère un nouveau code (étape 2), remplace-le dans la ligne <code>const CODE = '…'</code> du script, enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Envoie le nouveau lien d’invitation : chacun saisit ou ouvre le nouveau lien une fois.</td></tr>
     <tr><td>Mettre à jour le script</td><td>Quand l’appli indique dans l’onglet Saison que le script du groupe n’est pas à jour, reviens sur cette page. À l’étape 2, ouvre « J’ai déjà un code » et saisis ton code actuel, puis fais l’étape 3. Ensuite, la <b>Nouvelle version</b> du déploiement (comme ci-dessus). L’adresse du script ne change pas : les liens déjà envoyés fonctionnent toujours.</td></tr>
+    <tr><td>Activer ou arrêter les codes PIN</td><td>Dans le script, ligne <code>const PIN_ACTIF = …;</code> : <code>true</code> pour activer, <code>false</code> pour arrêter. Enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Les codes déjà créés sont conservés.</td></tr>
+    <tr><td>Un joueur a oublié son code PIN</td><td>Dans le script, écris son nom entre les guillemets de <code>const JOUEUR_PIN_A_REINITIALISER = '';</code>, enregistre, choisis la fonction <code>reinitialiserPin</code> dans la liste et clique sur <b>Exécuter</b>. Il crée un nouveau code en choisissant son nom dans l’appli.</td></tr>
     <tr><td>Ajouter ou retirer un joueur</td><td>Dans l’appli, onglet Saison, section Joueurs. Un joueur ajouté joue à partir de la saison suivante.</td></tr>
     <tr><td>Corriger un match</td><td>Dans l’appli : onglet Matchs, ouvre le match. Les corrections sont notées dans le journal.</td></tr>
     <tr><td>Supprimer un match de test</td><td>Dans le Sheet, onglet Matchs, remplace <code>termine</code> par <code>annule</code> dans la colonne statut.</td></tr>
@@ -206,8 +210,16 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
  */
 
 const CODE = '__CODE__';
-const SCRIPT_VERSION = 3;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
+const SCRIPT_VERSION = 4;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
 const MAX_BODY = 400000;    // taille maximale d'une requête (caractères)
+
+/* Code PIN par joueur (option). Mettre true pour que chaque joueur crée un code à 6 chiffres la première fois qu'il choisit son nom.
+   Après un changement ici, il faut redéployer : Déployer > Gérer les déploiements > crayon > Version : Nouvelle version > Déployer. */
+const PIN_ACTIF = false;
+const PIN_MAX_ESSAIS = 5;   // essais ratés avant blocage du nom
+const PIN_VERROU_MIN = 15;  // durée du blocage, en minutes
+/* Pour redonner à un joueur la possibilité de créer un nouveau code : écrire son nom ici, puis lancer reinitialiserPin(). */
+const JOUEUR_PIN_A_REINITIALISER = '';
 
 const TABS = {
   Joueurs: { cols: ['nom', 'actif', 'couleur'], text: [1, 2], widths: [120, 70, 80] },
@@ -302,6 +314,8 @@ function doPost(e) {
     if (req.action === 'ping') return out_({ ok: true, service: 'Barniotte', version: SCRIPT_VERSION });
     if (req.action === 'sync') return out_(sync_(req.since));
     if (req.action === 'apply') return out_(apply_(req.ops || []));
+    if (req.action === 'pin_set') return out_(pinSet_(req.name, req.pin));
+    if (req.action === 'pin_check') return out_(pinCheck_(req.name, req.pin));
     return out_({ ok: false, error: 'action' });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -332,8 +346,8 @@ function getRev_() {
 
 function sync_(since) {
   const rev = getRev_();
-  if (since != null && Number(since) === rev) return { ok: true, rev: rev, version: SCRIPT_VERSION, unchanged: true };
-  return { ok: true, rev: rev, version: SCRIPT_VERSION, state: readState_() };
+  if (since != null && Number(since) === rev) return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, unchanged: true });
+  return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, state: readState_() });
 }
 
 function tz_() { return SpreadsheetApp.getActive().getSpreadsheetTimeZone(); }
@@ -423,6 +437,8 @@ function checkOp_(op) {
     case 'player':
       if (!r || !r.name) return 'joueur incomplet';
       return txt_(r.name, 40) ? null : 'nom de joueur invalide';
+    case 'seasonDel':
+      return op.id != null && txt_(String(op.id), 20) ? null : 'saison invalide';
     case 'playerDel':
       if (!op.name) return 'joueur incomplet';
       return txt_(op.name, 40) ? null : 'nom de joueur invalide';
@@ -442,13 +458,33 @@ function apply_(ops) {
       const e = checkOp_(ops[i]);
       if (e) throw new Error('Opération ' + (i + 1) + ' : ' + e);
     }
+    verifierOps_(ops);
     const now = Utilities.formatDate(new Date(), tz_(), ISO);
     ops.forEach(function (op) { applyOp_(op, now); });
     const rev = bumpRev_();
-    return { ok: true, rev: rev, state: readState_() };
+    return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, state: readState_() });
   } finally {
     lock.releaseLock();
   }
+}
+
+/* Vérifications qui demandent de lire le Sheet : nom de joueur déjà pris (sans tenir compte des majuscules ni des accents), saison à supprimer qui a des matchs. */
+function norm_(s) {
+  return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function verifierOps_(ops) {
+  let noms = null, matchs = null;
+  ops.forEach(function (op, i) {
+    if (op.t === 'player') {
+      if (noms === null) noms = readTab_('Joueurs').map(function (r) { return text_(r[0]); }).filter(Boolean);
+      const n = norm_(op.row.name);
+      if (noms.indexOf(op.row.name) < 0 && noms.some(function (x) { return norm_(x) === n; })) throw new Error('Opération ' + (i + 1) + ' : ce nom existe déjà');
+      if (noms.indexOf(op.row.name) < 0) noms.push(op.row.name);
+    } else if (op.t === 'seasonDel') {
+      if (matchs === null) matchs = readTab_('Matchs').map(function (r) { return text_(r[1]); });
+      if (matchs.indexOf(String(op.id)) >= 0) throw new Error('Opération ' + (i + 1) + ' : cette saison contient des matchs');
+    }
+  });
 }
 
 function sheet_(name) {
@@ -502,47 +538,119 @@ function applyOp_(op, now) {
     const at = find_(sh, 1, r.name);
     const row = [r.name, r.active ? 'oui' : 'non', Number(r.c) || 0];
     if (at) put_(sh, 'Joueurs', row, at); else append_(sh, 'Joueurs', row);
+  } else if (op.t === 'seasonDel') {
+    const sh = sheet_('Saisons');
+    const at = find_(sh, 1, op.id);
+    if (at) sh.deleteRow(at);
   } else if (op.t === 'playerDel') {
     const sh = sheet_('Joueurs');
     const at = find_(sh, 1, op.name);
     if (at) sh.deleteRow(at);
+    pinOublier_(op.name);
   } else if (op.t === 'log') {
     insertTop_(sheet_('Journal'), 'Journal', [r.ts, r.by || '', r.match == null ? '' : String(r.match), r.what]);
   }
 }
-</script>
-<script type="text/plain" id="tpl-backup">/* ---------- Sauvegarde automatique (une copie par semaine, les 4 dernières conservées) ---------- */
 
-const NB_SAUVEGARDES = 4;
-const DOSSIER_SAUVEGARDES = 'Barniotte - Sauvegardes';
-const PREFIXE_SAUVEGARDE = 'Sauvegarde Barniotte ';
+/* ---------- Codes PIN ----------
+   Le code n'est jamais stocké : seulement une empreinte (SHA-256 avec un sel propre à ce script), dans les propriétés du script,
+   que seul le propriétaire du Sheet peut voir. Cinq essais ratés bloquent le nom pendant 15 minutes, quel que soit le téléphone. */
 
-/* À lancer une seule fois : programme la copie du dimanche vers 3 h et fait une première copie tout de suite. */
-function activerSauvegardeHebdo() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'sauvegarder') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('sauvegarder').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
-  sauvegarder();
+function pinLire_(cle) {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(cle) || '{}') || {}; } catch (e) { return {}; }
+}
+function pinEcrire_(cle, obj) { PropertiesService.getScriptProperties().setProperty(cle, JSON.stringify(obj)); }
+
+function pinSel_() {
+  const p = PropertiesService.getScriptProperties();
+  let s = p.getProperty('pinsel');
+  if (!s) { s = Utilities.getUuid(); p.setProperty('pinsel', s); }
+  return s;
+}
+function pinEmpreinte_(nom, pin) {
+  const oct = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, pinSel_() + '|' + nom + '|' + pin, Utilities.Charset.UTF_8);
+  return oct.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+}
+function pinFormat_(pin) {
+  if (typeof pin !== 'string' || !/^\d{6}$/.test(pin)) return false;
+  if (/^(\d)\1{5}$/.test(pin) || pin === '123456' || pin === '654321' || pin === '012345') return false;
+  return true;
 }
 
-function sauvegarder() {
-  const ss = SpreadsheetApp.getActive();
-  const dossiers = DriveApp.getFoldersByName(DOSSIER_SAUVEGARDES);
-  const dossier = dossiers.hasNext() ? dossiers.next() : DriveApp.createFolder(DOSSIER_SAUVEGARDES);
-  const horo = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd_HH-mm');
-  DriveApp.getFileById(ss.getId()).makeCopy(PREFIXE_SAUVEGARDE + horo, dossier);
-  // Ménage : on ne touche qu'aux copies de ce dossier, créées par ce script. Elles vont à la corbeille (récupérables 30 jours).
-  const copies = [];
-  const fichiers = dossier.getFiles();
-  while (fichiers.hasNext()) {
-    const f = fichiers.next();
-    if (f.getName().indexOf(PREFIXE_SAUVEGARDE) === 0) copies.push(f);
-  }
-  copies.sort(function (a, b) { return b.getDateCreated().getTime() - a.getDateCreated().getTime(); });
-  copies.slice(NB_SAUVEGARDES).forEach(function (f) { f.setTrashed(true); });
+/* Ajoute à une réponse l'état des codes : fonction activée ou non, et noms qui ont déjà un code (jamais le code). */
+function pinInfo_(rep) {
+  rep.pin = !!PIN_ACTIF;
+  rep.pinned = PIN_ACTIF ? Object.keys(pinLire_('pins')) : [];
+  return rep;
+}
+
+function pinSet_(nom, pin) {
+  if (!PIN_ACTIF) return { ok: false, error: 'pin_inactif' };
+  if (typeof nom !== 'string' || !nom || nom.length > 40) return { ok: false, error: 'joueur' };
+  if (!pinFormat_(pin)) return { ok: false, error: 'pin_format' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const existe = readTab_('Joueurs').some(function (r) { return text_(r[0]) === nom; });
+    if (!existe) return { ok: false, error: 'joueur' };
+    const pins = pinLire_('pins');
+    if (pins[nom]) return pinInfo_({ ok: false, error: 'pin_deja' });
+    pins[nom] = pinEmpreinte_(nom, pin);
+    pinEcrire_('pins', pins);
+    bumpRev_();
+    return pinInfo_({ ok: true });
+  } finally { lock.releaseLock(); }
+}
+
+function pinCheck_(nom, pin) {
+  if (!PIN_ACTIF) return { ok: false, error: 'pin_inactif' };
+  if (typeof nom !== 'string' || !nom || nom.length > 40 || typeof pin !== 'string' || pin.length > 12) return { ok: false, error: 'pin' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const pins = pinLire_('pins');
+    if (!pins[nom]) return pinInfo_({ ok: false, error: 'pin_aucun' });
+    const essais = pinLire_('pinessais');
+    const e = essais[nom] || { n: 0, jusqua: 0 };
+    const maintenant = Date.now();
+    if (e.jusqua > maintenant) return { ok: false, error: 'verrou', wait: Math.ceil((e.jusqua - maintenant) / 60000) };
+    if (pins[nom] === pinEmpreinte_(nom, pin)) {
+      if (essais[nom]) { delete essais[nom]; pinEcrire_('pinessais', essais); }
+      return { ok: true };
+    }
+    e.n = (e.n || 0) + 1;
+    if (e.n >= PIN_MAX_ESSAIS) {
+      essais[nom] = { n: 0, jusqua: maintenant + PIN_VERROU_MIN * 60000 };
+      pinEcrire_('pinessais', essais);
+      return { ok: false, error: 'verrou', wait: PIN_VERROU_MIN };
+    }
+    essais[nom] = { n: e.n, jusqua: 0 };
+    pinEcrire_('pinessais', essais);
+    return { ok: false, error: 'pin', left: PIN_MAX_ESSAIS - e.n };
+  } finally { lock.releaseLock(); }
+}
+
+function pinOublier_(nom) {
+  const pins = pinLire_('pins'), essais = pinLire_('pinessais');
+  if (pins[nom] || essais[nom]) { delete pins[nom]; delete essais[nom]; pinEcrire_('pins', pins); pinEcrire_('pinessais', essais); }
+}
+
+/* À lancer à la main depuis l'éditeur, après avoir écrit le nom dans JOUEUR_PIN_A_REINITIALISER (en haut du script). */
+function reinitialiserPin() {
+  if (!JOUEUR_PIN_A_REINITIALISER) throw new Error('Écris d’abord le nom du joueur dans JOUEUR_PIN_A_REINITIALISER, en haut du script.');
+  pinOublier_(JOUEUR_PIN_A_REINITIALISER);
+  bumpRev_();
+  Logger.log('Code réinitialisé pour ' + JOUEUR_PIN_A_REINITIALISER + '. Il en créera un nouveau en choisissant son nom.');
+}
+
+/* Efface tous les codes (à utiliser seulement si nécessaire). */
+function reinitialiserTousLesPin() {
+  pinEcrire_('pins', {}); pinEcrire_('pinessais', {});
+  bumpRev_();
+  Logger.log('Tous les codes sont effacés.');
 }
 </script>
+<script type="text/plain" id="tpl-backup">__BACKUP__</script>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
@@ -557,7 +665,7 @@ function sauvegarder() {
     for (var i = 0; i < 16; i++) out.push(ALPHA.charAt(buf[i] % ALPHA.length));
     return 'barn-' + [0, 4, 8, 12].map(function (k) { return out.slice(k, k + 4).join(''); }).join('-');
   }
-  function script() { return tpl.replace("'__CODE__'", "'" + code + "'"); }
+  function script() { var s = tpl.replace("'__CODE__'", "'" + code + "'"); if ($('opt-pin').checked) s = s.replace('const PIN_ACTIF = false;', 'const PIN_ACTIF = true;'); return s; }
 
   function copy(text, msgEl, okText) {
     function fallback() {
@@ -592,6 +700,7 @@ function sauvegarder() {
     m.className = 'ok'; m.textContent = 'Code pris en compte.';
     setCode(v);
   });
+  $('opt-pin').addEventListener('change', function () { if (code) $('script-view').value = script(); });
   $('copy-script').addEventListener('click', function () { copy(script(), $('copy-msg'), 'Script copié. Colle-le dans l’éditeur Apps Script (Ctrl+V).'); });
   $('copy-backup').addEventListener('click', function () { copy(backup, $('backup-msg'), 'Script de sauvegarde copié.'); });
 
