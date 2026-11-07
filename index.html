@@ -229,6 +229,10 @@ input[type="text"] { width: 100%; border: 1px solid var(--line); background: var
 .pod .aux { margin-top: 4px; font-size: 14px; color: var(--accent); font-weight: 600; }
 .podium-sub { font-weight: 600; margin: 0; }
 
+.pin-in { width: 100%; text-align: center; letter-spacing: .5em; font: inherit; font-size: 26px; font-weight: 700; min-height: 54px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 12px; padding: 8px 12px; }
+.pin-in::placeholder { letter-spacing: .3em; color: var(--muted); font-weight: 400; }
+.hint.ver { text-align: center; margin-top: 4px; }
+
 </style>
 
 </head>
@@ -389,7 +393,8 @@ const Core = (() => {
   const CONFIG_API = (window.BARNIOTTE && window.BARNIOTTE.api) || '';
   const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
   const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
-  const LATEST_SCRIPT = 3;             // dernière version du script serveur connue de cette appli
+  const LATEST_SCRIPT = 4;             // dernière version du script serveur connue de cette appli
+  const APP_STAGE = 'bêta', APP_VERSION = '0.4';
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
@@ -683,12 +688,111 @@ const Core = (() => {
         h('button', { type: 'button', class: 'btn primary', onclick: () => scoreStep(m, sh) }, 'Oui')));
   }
 
+  /* ---------- Identité et code PIN ----------
+     Si l'organisateur a activé les codes (PIN_ACTIF dans le script), chaque joueur crée un code à 6 chiffres la première fois qu'il choisit son nom.
+     Le serveur vérifie le code et bloque le nom après 5 essais ratés. Le téléphone retient qui s'est identifié : le code n'est redemandé qu'en changeant de téléphone ou de joueur. */
+  const pinOn = () => !!(API && net.pin);
+  const needsPin = () => pinOn() && !!me && state.players.some(p => p.name === me && p.active) && pinok !== me;
+  function identityGate() {
+    if (!me || !state.players.some(p => p.name === me && p.active)) { askWho(); return false; }
+    if (needsPin()) { enterIdentity(me); return false; }
+    checkPending(); return true;
+  }
+  function enterIdentity(name) {
+    if (!pinOn()) { setMe(name); if (openSh) openSh.close(); render(); checkPending(); return; }
+    if (net.pinned.includes(name)) askPin(name); else createPin(name);
+  }
+  function identityDone(name) {
+    pinok = name; lsSet(PINOK_KEY, name); setMe(name);
+    if (openSh) openSh.close();
+    render(); checkPending();
+  }
+  const pinField = (id, label) => {
+    const el = h('input', { type: 'password', inputmode: 'numeric', pattern: '[0-9]*', maxlength: '6', autocomplete: 'off', id, class: 'pin-in', 'aria-label': label, placeholder: '••••••' });
+    el.addEventListener('input', () => { const v = el.value.replace(/\D/g, '').slice(0, 6); if (v !== el.value) el.value = v; });
+    return el;
+  };
+  const pinWeak = p => /^(\d)\1{5}$/.test(p) || p === '123456' || p === '654321' || p === '012345';
+  const NET_MSG = 'Impossible de joindre le serveur. Vérifie ta connexion et réessaie.';
+  function addPinned(name) { if (!net.pinned.includes(name)) { net.pinned.push(name); savePinInfo(); } }
+
   function askWho() {
     const sh = openSheet(true);
+    const act = state.players.filter(p => p.active).map(p => p.name);
+    const on = pinOn();
+    const free = on ? act.filter(n => !net.pinned.includes(n)) : act;
+    const taken = on ? act.filter(n => net.pinned.includes(n)) : [];
+    const retrouver = () => sh.set(
+      h('h2', {}, 'Retrouver mon nom'),
+      h('p', { class: 'hint' }, 'Choisis ton nom, puis saisis le code PIN que tu avais créé.'),
+      chips(taken, { onChange: v => askPin(v[0]) }),
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: askWho }, 'Retour')));
     sh.set(
       h('h2', {}, 'Qui es-tu ?'),
-      h('p', { class: 'hint' }, 'Ton nom sert à retrouver qui a saisi ou modifié un match. Il n’y a pas de mot de passe : tout repose sur la confiance, comme à la table.'),
-      chips(state.players.filter(p => p.active).map(p => p.name), { onChange: v => { setMe(v[0]); sh.close(); render(); checkPending(); } }));
+      h('p', { class: 'hint' }, on
+        ? 'Les noms déjà pris ne sont pas proposés. Choisis ton nom, puis crée un code PIN à 6 chiffres : il évite que quelqu’un joue à ta place.'
+        : 'Ton nom sert à retrouver qui a saisi ou modifié un match. Il n’y a pas de mot de passe : tout repose sur la confiance, comme à la table.'),
+      free.length ? chips(free, { onChange: v => enterIdentity(v[0]) }) : h('p', { class: 'hint' }, 'Tous les noms sont déjà pris.'),
+      taken.length ? h('button', { type: 'button', class: 'btn ghost', onclick: retrouver }, 'Mon nom est déjà pris : j’ai un code PIN') : null);
+  }
+
+  function askPin(name) {
+    const sh = openSheet(true);
+    const inp = pinField('pin-in', 'Code PIN de ' + name), msg = h('p', { class: 'hint', 'aria-live': 'polite' });
+    const go = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: submit }, 'Valider');
+    inp.addEventListener('input', () => { go.disabled = !/^\d{6}$/.test(inp.value); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !go.disabled) submit(); });
+    async function submit() {
+      go.disabled = true; msg.className = 'hint'; msg.textContent = 'Vérification…';
+      try {
+        const r = await call('pin_check', { name, pin: inp.value });
+        if (r.ok) { identityDone(name); return; }
+        if (r.error === 'pin_inactif') { identityDone(name); return; }
+        if (r.error === 'pin_aucun') { net.pinned = net.pinned.filter(n => n !== name); savePinInfo(); createPin(name); return; }
+        msg.className = 'hint err';
+        if (r.error === 'verrou') msg.textContent = 'Trop d’essais : ce nom est bloqué encore ' + plural(r.wait || 15, 'minute', 'minutes') + '.';
+        else if (r.error === 'pin') msg.textContent = 'Code incorrect. Il te reste ' + plural(r.left, 'essai', 'essais') + ' avant un blocage de 15 minutes.';
+        else if (r.error === 'code') msg.textContent = 'Le code d’accès du groupe n’est plus valable. Recharge l’appli.';
+        else msg.textContent = 'Erreur : ' + (r.error || 'inconnue');
+      } catch (e) { msg.className = 'hint err'; msg.textContent = NET_MSG; }
+      inp.value = ''; go.disabled = true; inp.focus();
+    }
+    sh.set(h('h2', {}, 'Bonjour ' + name),
+      h('p', { class: 'hint' }, 'Saisis ton code PIN à 6 chiffres. Tu ne le saisis qu’une fois sur ce téléphone.'),
+      inp, msg,
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: askWho }, 'Ce n’est pas moi'), go),
+      h('p', { class: 'hint' }, 'Code oublié ? L’organisateur peut le réinitialiser.'));
+    setTimeout(() => inp.focus(), 50);
+  }
+
+  function createPin(name) {
+    const sh = openSheet(true);
+    const p1 = pinField('pin-new', 'Choisis ton code PIN'), p2 = pinField('pin-new2', 'Confirme ton code PIN'), msg = h('p', { class: 'hint', 'aria-live': 'polite' });
+    const go = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: submit }, 'Créer mon code');
+    const check = () => { go.disabled = !(/^\d{6}$/.test(p1.value) && p1.value === p2.value); msg.className = 'hint'; msg.textContent = p2.value.length === 6 && p1.value !== p2.value ? 'Les deux codes ne sont pas identiques.' : ''; };
+    p1.addEventListener('input', check); p2.addEventListener('input', check);
+    async function submit() {
+      if (pinWeak(p1.value)) { msg.className = 'hint err'; msg.textContent = 'Ce code est trop facile à deviner. Choisis-en un autre.'; return; }
+      go.disabled = true; msg.className = 'hint'; msg.textContent = 'Création…';
+      try {
+        const r = await call('pin_set', { name, pin: p1.value });
+        if (r.ok) { addPinned(name); identityDone(name); toast('Code créé. Note-le : il te servira sur un autre téléphone.'); return; }
+        if (r.error === 'pin_inactif') { identityDone(name); return; }
+        if (r.error === 'pin_deja') { addPinned(name); toast(name + ' a déjà un code.'); askPin(name); return; }
+        msg.className = 'hint err';
+        if (r.error === 'joueur') msg.textContent = 'Ce joueur n’est pas encore enregistré sur le serveur. Réessaie dans un instant.';
+        else if (r.error === 'pin_format') msg.textContent = 'Le code doit faire 6 chiffres, pas trop évidents.';
+        else msg.textContent = 'Erreur : ' + (r.error || 'inconnue');
+      } catch (e) { msg.className = 'hint err'; msg.textContent = NET_MSG; }
+      go.disabled = false;
+    }
+    sh.set(h('h2', {}, 'Crée ton code PIN, ' + name),
+      h('p', { class: 'hint' }, '6 chiffres que tu es le seul à connaître. Il te sera demandé si tu changes de téléphone ou si tu te connectes depuis un ordinateur. Évite une date de naissance.'),
+      h('div', {}, h('div', { class: 'lbl hint' }, 'Code'), p1),
+      h('div', {}, h('div', { class: 'lbl hint' }, 'Confirme le code'), p2),
+      msg,
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: askWho }, 'Ce n’est pas moi'), go));
+    setTimeout(() => p1.focus(), 50);
   }
 
   /* ---------- Onglet Classement ---------- */
@@ -917,6 +1021,23 @@ const Core = (() => {
       h('button', { type: 'button', class: 'btn primary', onclick: () => { sh.close(); render(); } }, 'Fermer'));
   }
 
+  /* Une saison ouverte par erreur, sans aucun match, peut être supprimée. Le serveur refuse si un match existe. */
+  function delSeasonBtn(s) {
+    if (state.matches.some(m => String(m.season) === String(s.id))) return null;
+    if (API && !(net.version >= 4)) return null;
+    return h('button', { type: 'button', class: 'btn ghost', onclick: () => {
+      const sh = openSheet();
+      sh.set(h('h2', {}, 'Supprimer ' + s.name + ' ?'),
+        h('p', {}, 'Aucun match n’est enregistré dans cette saison. Elle sera effacée du Sheet, pour tout le monde.'),
+        h('div', { class: 'btns' },
+          h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+          h('button', { type: 'button', class: 'btn danger', onclick: () => {
+            const i = state.seasons.indexOf(s); if (i < 0) { sh.close(); return; }
+            state.seasons.splice(i, 1); logEntry('Saison supprimée (vide) : ' + s.name, null); commit(); sh.close(); toast(s.name + ' supprimée.');
+          } }, 'Supprimer')));
+    } }, 'Supprimer cette saison (aucun match)');
+  }
+
   function endInter(s) {
     const sh = openSheet();
     sh.set(h('h2', {}, 'Terminer ' + s.name),
@@ -1011,13 +1132,15 @@ const Core = (() => {
       h('p', { class: 'hint' }, 'Auto suit le réglage de ton téléphone. Clair ou Sombre force l\u2019affichage.')));
 
     out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Mon identité'),
-      chips(state.players.filter(p => p.active).map(p => p.name), { selected: me ? [me] : [], onChange: v => { setMe(v[0]); render(); } })));
+      chips(state.players.filter(p => p.active).map(p => p.name), { selected: me ? [me] : [], onChange: v => { if (v[0] === me && !needsPin()) return; if (pinOn()) enterIdentity(v[0]); else { setMe(v[0]); render(); } } }),
+      pinOn() ? h('p', { class: 'hint' }, 'Pour prendre l’identité d’un autre joueur, il faut son code PIN.') : null));
 
     if (s && isInter(s)) {
       out.append(h('div', { class: 'card stack' },
         h('h2', { class: 'sec-h' }, s.name + ' · depuis le ' + fmtShort(s.start)),
         h('p', { class: 'hint' }, 'Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement. Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison.'),
-        h('button', { type: 'button', class: 'btn', onclick: () => endInter(s) }, 'Terminer l’intersaison')));
+        h('button', { type: 'button', class: 'btn', onclick: () => endInter(s) }, 'Terminer l’intersaison'),
+        delSeasonBtn(s)));
     } else if (s) {
       const S = standings(state, s);
       const floor = maxPairCount(state, s);
@@ -1031,7 +1154,8 @@ const Core = (() => {
             h('button', { type: 'button', 'aria-label': 'Plus', disabled: s.quota >= 40, onclick: () => setQuota(s.quota + 1) }, '+'))),
         h('p', { class: 'hint' }, floor > 0 ? 'Le quota ne peut pas passer sous ' + floor + ', nombre de matchs déjà joués par le duo le plus actif.' : 'Modifiable tant qu’aucun match n’est enregistré.'),
         h('p', { class: 'hint' }, S.played + ' / ' + S.total + ' matchs joués. Joueurs : ' + s.players.join(', ') + '.'),
-        h('button', { type: 'button', class: 'btn', onclick: () => closeSeason(s) }, 'Clôturer la saison')));
+        h('button', { type: 'button', class: 'btn', onclick: () => closeSeason(s) }, 'Clôturer la saison'),
+        delSeasonBtn(s)));
     } else out.append(newSeasonForm());
 
     const pl = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Joueurs'),
@@ -1051,7 +1175,8 @@ const Core = (() => {
       if (!n) return;
       const bad = badText(n, 40);
       if (bad) { toast(bad); return; }
-      if (state.players.some(p => p.name.toLowerCase() === n.toLowerCase())) { toast(n + ' existe déjà.'); return; }
+      const sans = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (state.players.some(p => sans(p.name) === sans(n))) { toast(n + ' existe déjà.'); return; }
       state.players.push({ name: n, active: true, c: Math.max(-1, ...state.players.map(q => (q.c == null ? -1 : q.c))) + 1 }); logEntry('Joueur ajouté : ' + n, null); commit(); toast(n + ' ajouté à la liste.');
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
@@ -1103,6 +1228,7 @@ const Core = (() => {
     lg.append(state.log.length ? ul : h('p', { class: 'hint' }, 'Aucune modification pour le moment.'));
     out.append(lg);
 
+    out.append(h('p', { class: 'hint ver' }, 'Barniotte ' + APP_STAGE + ' ' + APP_VERSION + (API && net.version != null ? ' · script v' + net.version : '')));
     if (!API) out.append(h('button', { type: 'button', class: 'btn ghost', onclick: () => {
       const sh = openSheet();
       sh.set(h('h2', {}, 'Réinitialiser la démo'), h('p', {}, 'Les données de cet appareil reviennent à l’import de ta fiche (73 matchs). Tes saisies de test seront perdues.'),
@@ -1120,6 +1246,11 @@ const Core = (() => {
   let outbox = [];
   try { outbox = JSON.parse(localStorage.getItem(OUT_KEY) || '[]'); } catch (e) { outbox = []; }
   const net = { state: API ? (code ? 'idle' : 'locked') : (HOSTED ? 'locked' : 'local'), version: null, rev: null, busy: false, again: false, loaded: false, tick: 0, at: '', error: '', polling: false };
+  const PINOK_KEY = 'barniotte-pinok' + NS, PININFO_KEY = 'barniotte-pininfo' + NS;
+  let pinok = lsGet(PINOK_KEY) || '';
+  net.pin = false; net.pinned = [];
+  try { const pi = JSON.parse(lsGet(PININFO_KEY) || 'null'); if (pi) { net.pin = !!pi.on; net.pinned = Array.isArray(pi.names) ? pi.names.filter(n => typeof n === 'string') : []; } } catch (e) { /* ignoré */ }
+  const savePinInfo = () => lsSet(PININFO_KEY, JSON.stringify({ on: net.pin, names: net.pinned }));
   let snap = null;
   const saveOutbox = () => { try { localStorage.setItem(OUT_KEY, JSON.stringify(outbox)); } catch (e) { /* ignoré */ } };
   const uid = () => 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1147,6 +1278,7 @@ const Core = (() => {
     state.seasons.forEach(s => { const j = JSON.stringify(pickSeason(s)); if (snap.s[s.id] !== j) { ops.push({ t: 'season', row: JSON.parse(j) }); snap.s[s.id] = j; } });
     state.players.forEach(p => { const j = JSON.stringify(pickPlayer(p)); if (snap.p[p.name] !== j) { ops.push({ t: 'player', row: JSON.parse(j) }); snap.p[p.name] = j; } });
     Object.keys(snap.p).forEach(n => { if (!state.players.some(p => p.name === n)) { ops.push({ t: 'playerDel', name: n }); delete snap.p[n]; } });
+    Object.keys(snap.s).forEach(id => { if (!state.seasons.some(s => String(s.id) === id)) { ops.push({ t: 'seasonDel', id: Number(id) }); delete snap.s[id]; } });
     state.log.slice().reverse().forEach(l => {
       const k = logKey(l);
       if (!snap.l.has(k)) { ops.push({ t: 'log', row: { ts: l.ts, by: l.by, match: l.match == null ? null : String(l.match), what: l.what } }); snap.l.add(k); }
@@ -1182,7 +1314,8 @@ const Core = (() => {
     try {
       const res = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ code, action }, extra || {})), signal: ctl.signal });
       const j = await res.json();
-      if (j && j.ok) net.version = typeof j.version === 'number' ? j.version : 0;
+      if (j && j.ok) { if (typeof j.version === 'number') net.version = j.version; else if (net.version == null) net.version = 0; }
+      if (j && typeof j.pin === 'boolean') { net.pin = j.pin; net.pinned = Array.isArray(j.pinned) ? j.pinned : []; savePinInfo(); }
       return j;
     } finally { clearTimeout(timer); }
   }
@@ -1232,6 +1365,7 @@ const Core = (() => {
       } else if (e.server) { net.state = 'error'; net.error = e.message; } else net.state = 'offline';
     } finally {
       net.busy = false; paintNet(); render();
+      if (readyDone && net.loaded && needsPin() && !openSh) enterIdentity(me);
       if (net.again) { net.again = false; setTimeout(() => syncNow(false), 200); }
     }
   }
@@ -1357,9 +1491,11 @@ const Core = (() => {
       input, msg, go);
   }
 
+  let readyDone = false;
   function afterReady() {
+    readyDone = true;
     if (!state.players.length) return;
-    if (!me || !state.players.some(p => p.name === me && p.active)) askWho(); else checkPending();
+    identityGate();
   }
 
   function startPolling() {
@@ -1394,7 +1530,7 @@ const Core = (() => {
   }
 
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { if (currentTab() === b.dataset.tab) { window.scrollTo(0, 0); render(); } else location.hash = b.dataset.tab; }));
-  document.getElementById('fab').addEventListener('click', () => { if (HOSTED && !API) return; if (!me) askWho(); else startMatch(); });
+  document.getElementById('fab').addEventListener('click', () => { if (HOSTED && !API) return; if (!me) askWho(); else if (needsPin()) enterIdentity(me); else startMatch(); });
   document.getElementById('who').addEventListener('click', () => { location.hash = 'saison'; });
   document.getElementById('theme').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
   window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
