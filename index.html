@@ -472,7 +472,19 @@ const Core = (() => {
     }
     return e;
   }
-  const curSeason = () => state.seasons.find(s => s.status === 'en_cours') || null;
+  /* Une intersaison est une saison sans quota ni classement. Pour rester compatible avec les scripts déjà installés,
+     elle est repérée par son statut : « inter » (ouverte) et « archivee_inter » (terminée). */
+  const isInter = s => !!s && (s.status === 'inter' || s.status === 'archivee_inter');
+  const isArch = s => s.status === 'archivee' || s.status === 'archivee_inter';
+  const curSeason = () => state.seasons.find(s => s.status === 'en_cours' || s.status === 'inter') || null;
+  /* Joueurs d'une saison. Intersaison ouverte : tous les joueurs actifs (un nouveau peut jouer tout de suite), plus ceux qui ont déjà joué. */
+  function seasonPlayers(s) {
+    if (!isInter(s)) return s.players;
+    const set = new Set(s.status === 'inter' ? state.players.filter(p => p.active).map(p => p.name) : []);
+    state.matches.forEach(m => { if (m.season === s.id && m.status !== 'annule') { set.add(m.a); set.add(m.b); } });
+    return Array.from(set).sort(fr);
+  }
+  const eff = s => (isInter(s) ? Object.assign({}, s, { players: seasonPlayers(s), quota: 1 }) : s);
   const colorOf = n => { const p = state.players.find(x => x.name === n); const i = p && p.c != null ? p.c : 0; return 'var(--c' + ((i % 7) + 1) + ')'; };
   const nowIso = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 19); };
   const fmtDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -557,9 +569,12 @@ const Core = (() => {
     if (!s) { toast('Aucune saison ouverte. Ouvre-en une dans l’onglet Saison.'); return; }
     const sh = openSheet();
     let A = null, B = null;
+    const players = seasonPlayers(s);
     const draw = () => {
       let info = null, blocked = false;
-      if (A && B) {
+      if (A && B && isInter(s)) {
+        info = h('p', { class: 'hint' }, A + ' – ' + B + ' : ' + plural(pairCountAll(state, eff(s), A, B), 'match joué', 'matchs joués') + ' en intersaison.');
+      } else if (A && B) {
         const n = pairCountAll(state, s, A, B);
         blocked = n >= s.quota;
         info = blocked
@@ -568,8 +583,8 @@ const Core = (() => {
       }
       sh.set(
         h('h2', {}, 'Nouveau match'),
-        h('div', {}, h('div', { class: 'lbl' }, 'Joueur 1'), chips(s.players, { selected: A ? [A] : [], disabled: B ? [B] : [], onChange: v => { A = v[0]; draw(); } })),
-        h('div', {}, h('div', { class: 'lbl' }, 'Joueur 2'), chips(s.players, { selected: B ? [B] : [], disabled: A ? [A] : [], onChange: v => { B = v[0]; draw(); } })),
+        h('div', {}, h('div', { class: 'lbl' }, 'Joueur 1'), chips(players, { selected: A ? [A] : [], disabled: B ? [B] : [], onChange: v => { A = v[0]; draw(); } })),
+        h('div', {}, h('div', { class: 'lbl' }, 'Joueur 2'), chips(players, { selected: B ? [B] : [], disabled: A ? [A] : [], onChange: v => { B = v[0]; draw(); } })),
         info,
         h('div', { class: 'btns' },
           h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
@@ -706,16 +721,43 @@ const Core = (() => {
     return svg + '</svg>';
   }
 
+  /* Intersaison : pas de classement, juste les derniers résultats de chacun et les duos les moins joués. */
+  function viewInter(s) {
+    const S = standings(state, eff(s));
+    const total = S.pairs.reduce((a, p) => a + p.n, 0);
+    const out = h('div', { class: 'stack' });
+    out.append(h('div', { class: 'banner' }, h('b', {}, 'Intersaison'),
+      h('span', {}, 'Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement. ' + plural(total, 'match joué', 'matchs joués') + '.')));
+    const card = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Joueurs'));
+    S.rows.slice().sort((x, y) => fr(x.name, y.name)).forEach(r => {
+      card.append(h('div', { class: 'row' },
+        h('div', { style: 'min-width:0' },
+          h('div', { class: 'nm' }, h('i', { class: 'dot', style: 'background:' + colorOf(r.name) }), h('span', { class: 't' }, r.name)),
+          h('div', { class: 'form', 'aria-label': 'Derniers résultats' }, r.form.slice(-5).map(f => h('i', { class: f === 'V' ? '' : 'd' })))),
+        h('span', { class: 'hint' }, plural(r.J, 'match', 'matchs'))));
+    });
+    out.append(card);
+    const least = S.pairs.slice().sort((x, y) => x.n - y.n || fr(x.a, y.a)).slice(0, 5);
+    if (least.length) {
+      const c2 = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Pour varier les adversaires'),
+        h('p', { class: 'hint' }, 'Les duos les moins joués.'));
+      least.forEach(p => c2.append(h('div', { class: 'row' }, h('span', {}, p.a + ' vs ' + p.b), h('span', { class: 'hint' }, plural(p.n, 'match', 'matchs')))));
+      out.append(c2);
+    }
+    return out;
+  }
+
   function viewClassement() {
     const s = curSeason();
     if (!s) {
-      const last = state.seasons.filter(x => x.status === 'archivee').slice(-1)[0];
+      const last = state.seasons.filter(isArch).slice(-1)[0];
       return h('div', { class: 'stack' }, h('div', { class: 'card stack' },
         h('h2', { class: 'sec-h' }, 'Pas de saison ouverte'),
         last ? h('p', {}, last.name + ' est archivée.') : null,
         h('p', { class: 'hint' }, 'Ouvre une nouvelle saison pour enregistrer des matchs.'),
         h('button', { type: 'button', class: 'btn primary', onclick: () => { location.hash = 'saison'; } }, 'Ouvrir une saison')));
     }
+    if (isInter(s)) return viewInter(s);
     const S = standings(state, s);
     const out = h('div', { class: 'stack' });
     if (S.complete) {
@@ -752,6 +794,21 @@ const Core = (() => {
   function viewDuels() {
     const s = curSeason();
     if (!s) return h('div', { class: 'card' }, h('p', { class: 'hint' }, 'Aucune saison ouverte.'));
+    if (isInter(s)) {
+      const SI = standings(state, eff(s));
+      const maxN = Math.max(1, ...SI.pairs.map(p => p.n));
+      const ci = h('div', { class: 'card' }, h('h2', { class: 'sec-h' }, 'Matchs joués par duo'),
+        h('p', { class: 'hint' }, 'Les duos les moins joués sont en haut, pour varier les adversaires.'));
+      SI.pairs.slice().sort((x, y) => x.n - y.n || fr(x.a, y.a)).forEach(p => {
+        ci.append(h('details', { class: 'duel' },
+          h('summary', {},
+            h('div', { class: 'names' }, h('span', { class: 'vs' }, p.a + ' vs ' + p.b)),
+            h('div', { class: 'bar' }, h('i', { style: 'width:' + Math.round(100 * p.n / maxN) + '%' })),
+            h('div', { class: 'meta' }, h('span', {}, plural(p.n, 'match', 'matchs')))),
+          h('ul', {}, p.list.slice().sort((x, y) => byTime(y, x)).map(m => h('li', {}, h('span', {}, m.a + ' ' + sc(m) + ' ' + m.b), h('span', {}, fmtShort(m.ts.slice(0, 10))))))));
+      });
+      return ci;
+    }
     const S = standings(state, s);
     const card = h('div', { class: 'card' }, h('h2', { class: 'sec-h' }, 'Matchs joués par duo'));
     S.pairs.slice().sort((x, y) => y.remaining - x.remaining || fr(x.a, y.a)).forEach(p => {
@@ -769,7 +826,7 @@ const Core = (() => {
   function viewMatchs() {
     const s = curSeason();
     const out = h('div', { class: 'stack' });
-    const names = ['Tous'].concat(s ? s.players : []);
+    const names = ['Tous'].concat(s ? seasonPlayers(s) : []);
     out.append(chips(names, { selected: [filter], onChange: v => { filter = v[0]; render(); } }));
     const list = state.matches.filter(m => m.status !== 'annule' && (!s || m.season === s.id) && (filter === 'Tous' || m.a === filter || m.b === filter))
       .sort((x, y) => byTime(y, x));
@@ -860,28 +917,54 @@ const Core = (() => {
       h('button', { type: 'button', class: 'btn primary', onclick: () => { sh.close(); render(); } }, 'Fermer'));
   }
 
+  function endInter(s) {
+    const sh = openSheet();
+    sh.set(h('h2', {}, 'Terminer ' + s.name),
+      h('p', {}, 'L’intersaison passe en archive avec tous ses matchs. Tu pourras ensuite ouvrir une nouvelle saison.'),
+      h('p', { class: 'hint' }, 'Rien n’est supprimé. Il n’y a ni podium ni classement.'),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => {
+          s.status = 'archivee_inter'; s.end = nowIso().slice(0, 10);
+          state.matches.forEach(m => { if (m.season === s.id && m.status === 'en_cours') m.status = 'annule'; });
+          logEntry(s.name + ' terminée', null); commit(); sh.close(); toast(s.name + ' archivée.');
+        } }, 'Terminer l’intersaison')));
+  }
+
   function newSeasonForm() {
     const act = state.players.filter(p => p.active).map(p => p.name);
-    let picked = act.slice(), quota = 10, name = 'Saison ' + nextSeasonId();
+    let kind = 'Saison', picked = act.slice(), quota = 10;
+    const defName = k => (k === 'Intersaison' ? 'Intersaison' : 'Saison ' + nextSeasonId());
+    let name = defName(kind);
     const box = h('div', { class: 'card stack' });
     const draw = () => {
-      const nameIn = h('input', { type: 'text', id: 'ns-name', value: name, 'aria-label': 'Nom de la saison' });
+      const inter = kind === 'Intersaison';
+      const nameIn = h('input', { type: 'text', id: 'ns-name', value: name, 'aria-label': inter ? 'Nom de l’intersaison' : 'Nom de la saison' });
       nameIn.addEventListener('input', () => { name = nameIn.value; });
+      const bad = badText(name.trim(), 60);
       box.replaceChildren(
-        h('h2', { class: 'sec-h' }, 'Nouvelle saison'),
+        h('h2', { class: 'sec-h' }, inter ? 'Nouvelle intersaison' : 'Nouvelle saison'),
+        chips(['Saison', 'Intersaison'], { selected: [kind], onChange: v => { if (name === defName(kind)) name = defName(v[0]); kind = v[0]; draw(); } }),
         h('div', {}, h('div', { class: 'lbl hint' }, 'Nom'), nameIn),
-        h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs classés (une fois la saison lancée, plus d’ajout)'),
+        inter ? null : h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs classés (une fois la saison lancée, plus d’ajout)'),
           chips(act, { multi: true, selected: picked, onChange: v => { picked = v; draw(); } })),
-        h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
+        inter ? null : h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
           h('div', { class: 'stepper' },
             h('button', { type: 'button', 'aria-label': 'Moins', disabled: quota <= 1, onclick: () => { quota--; draw(); } }, '−'), h('output', {}, String(quota)),
             h('button', { type: 'button', 'aria-label': 'Plus', disabled: quota >= 40, onclick: () => { quota++; draw(); } }, '+'))),
-        badText(name.trim(), 60) ? h('p', { class: 'hint err' }, 'Nom de saison : ' + badText(name.trim(), 60)) : null,
-        picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.'),
-        h('button', { type: 'button', class: 'btn primary', disabled: picked.length < 2 || !name.trim() || !!badText(name.trim(), 60), onclick: () => {
+        bad ? h('p', { class: 'hint err' }, 'Nom : ' + bad) : null,
+        inter
+          ? h('p', { class: 'hint' }, 'Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison. Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement.')
+          : (picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.')),
+        h('button', { type: 'button', class: 'btn primary', disabled: !name.trim() || !!bad || (inter ? act.length < 2 : picked.length < 2), onclick: () => {
+          if (inter) {
+            const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'inter', quota: 1, players: act.slice().sort(fr) };
+            state.seasons.push(s); logEntry(s.name + ' ouverte (sans classement)', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
+            return;
+          }
           const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'en_cours', quota, players: picked.slice().sort(fr) };
           state.seasons.push(s); logEntry(s.name + ' ouverte : ' + s.players.join(', ') + ', ' + quota + ' matchs par duo', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
-        } }, 'Ouvrir la saison'));
+        } }, inter ? 'Ouvrir l’intersaison' : 'Ouvrir la saison'));
     };
     draw();
     return box;
@@ -892,7 +975,7 @@ const Core = (() => {
     const n = state.matches.filter(m => m.a === p.name || m.b === p.name).length;
     const sh = openSheet();
     const close = h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Fermer');
-    if (s && s.players.includes(p.name)) {
+    if (s && !isInter(s) && s.players.includes(p.name)) {
       sh.set(h('h2', {}, 'Supprimer ' + p.name),
         h('p', {}, p.name + ' joue la saison en cours : il apparaît au classement. Tu pourras le supprimer après la clôture de la saison, s\u2019il n\u2019a aucun match enregistré.'), close);
     } else if (n > 0) {
@@ -930,7 +1013,12 @@ const Core = (() => {
     out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Mon identité'),
       chips(state.players.filter(p => p.active).map(p => p.name), { selected: me ? [me] : [], onChange: v => { setMe(v[0]); render(); } })));
 
-    if (s) {
+    if (s && isInter(s)) {
+      out.append(h('div', { class: 'card stack' },
+        h('h2', { class: 'sec-h' }, s.name + ' · depuis le ' + fmtShort(s.start)),
+        h('p', { class: 'hint' }, 'Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement. Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison.'),
+        h('button', { type: 'button', class: 'btn', onclick: () => endInter(s) }, 'Terminer l’intersaison')));
+    } else if (s) {
       const S = standings(state, s);
       const floor = maxPairCount(state, s);
       const setQuota = q => { logEntry('Matchs par duo : ' + s.quota + ' → ' + q, null); s.quota = q; commit(); };
@@ -947,10 +1035,10 @@ const Core = (() => {
     } else out.append(newSeasonForm());
 
     const pl = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Joueurs'),
-      h('p', { class: 'hint' }, 'Un joueur ajouté joue à partir de la saison suivante, jamais en cours de saison.'));
+      h('p', { class: 'hint' }, s && isInter(s) ? 'Un joueur ajouté pendant l’intersaison peut jouer tout de suite. Dans une saison classée, il joue à partir de la suivante.' : 'Un joueur ajouté joue à partir de la saison suivante, jamais en cours de saison.'));
     const list = h('div', { class: 'plist' });
     state.players.forEach(p => {
-      const inSeason = s && s.players.includes(p.name);
+      const inSeason = s && !isInter(s) && s.players.includes(p.name);
       list.append(h('div', { class: 'row' },
         h('span', {}, h('i', { class: 'dot', style: 'display:inline-block;background:' + colorOf(p.name) + ';margin-right:8px' }), p.name, inSeason ? h('span', { class: 'hint' }, ' · saison en cours') : null),
         h('div', { class: 'rowbtns' },
@@ -989,10 +1077,18 @@ const Core = (() => {
           h('button', { type: 'button', class: 'btn ghost', onclick: leaveGroup }, 'Quitter le groupe'))));
     }
 
-    const arch = state.seasons.filter(x => x.status === 'archivee');
+    const arch = state.seasons.filter(isArch);
     if (arch.length) {
       const ac = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Saisons archivées'));
       arch.slice().reverse().forEach(a => {
+        if (isInter(a)) {
+          const SI = standings(state, eff(a));
+          const ms = state.matches.filter(m => m.season === a.id && m.status === 'termine').sort((x, y) => byTime(y, x));
+          ac.append(h('details', {}, h('summary', {}, a.name + ' · ' + fmtShort(a.start) + ' → ' + fmtShort(a.end) + ' · ' + plural(ms.length, 'match', 'matchs')),
+            h('div', { class: 'plist', style: 'margin-top:8px' }, SI.pairs.slice().sort((x, y) => y.n - x.n || fr(x.a, y.a)).filter(p => p.n > 0).map(p => h('div', { class: 'row' }, h('span', {}, p.a + ' vs ' + p.b), h('span', { class: 'hint' }, plural(p.n, 'match', 'matchs'))))),
+            h('ul', { style: 'margin-top:8px' }, ms.map(m => h('li', {}, h('span', {}, m.a + ' ' + sc(m) + ' ' + m.b), ' ', h('span', { class: 'hint' }, fmtShort(m.ts.slice(0, 10))))))));
+          return;
+        }
         const S = standings(state, a);
         ac.append(h('details', {}, h('summary', {}, a.name + ' · ' + fmtShort(a.start) + ' → ' + fmtShort(a.end) + (S.rows[0] && S.rows[0].J ? ' · 1er ' + S.rows[0].name : '')),
           h('div', { class: 'plist', style: 'margin-top:8px' }, S.rows.map((r, i) => h('div', { class: 'row' }, h('span', {}, (i + 1) + '. ' + r.name + (r.aux ? ' (aux points)' : '')), h('span', { class: 'hint' }, r.V + ' V sur ' + r.J)))),
