@@ -233,6 +233,8 @@ input[type="text"] { width: 100%; border: 1px solid var(--line); background: var
 .pin-in::placeholder { letter-spacing: .3em; color: var(--muted); font-weight: 400; }
 .hint.ver { text-align: center; margin-top: 4px; }
 
+.welcome .steps { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+
 </style>
 
 </head>
@@ -519,7 +521,7 @@ const Core = (() => {
     const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true' });
     scrim.append(box);
     const api = {
-      set(...nodes) { box.replaceChildren(...nodes); box.scrollTop = 0; },
+      set(...nodes) { box.replaceChildren(...nodes.filter(Boolean)); box.scrollTop = 0; },
       close() { scrim.remove(); document.body.classList.remove('lock'); if (openSh === api) openSh = null; }
     };
     if (!locked) scrim.addEventListener('click', e => { if (e.target === scrim) api.close(); });
@@ -854,6 +856,7 @@ const Core = (() => {
   function viewClassement() {
     const s = curSeason();
     if (!s) {
+      if (isEmptyGroup()) return h('div', { class: 'stack' }, welcomeCard());
       const last = state.seasons.filter(isArch).slice(-1)[0];
       return h('div', { class: 'stack' }, h('div', { class: 'card stack' },
         h('h2', { class: 'sec-h' }, 'Pas de saison ouverte'),
@@ -1052,23 +1055,29 @@ const Core = (() => {
         } }, 'Terminer l’intersaison')));
   }
 
+  /* Le formulaire de nouvelle saison garde son brouillon : une synchro qui apporte des données redessine l'écran sans effacer le nom, le type, les joueurs ni le nombre de matchs. */
+  let seasonDraft = null, playerDraft = '';
   function newSeasonForm() {
     const act = state.players.filter(p => p.active).map(p => p.name);
-    let kind = 'Saison', picked = act.slice(), quota = 10;
     const defName = k => (k === 'Intersaison' ? 'Intersaison' : 'Saison ' + nextSeasonId());
-    let name = defName(kind);
+    const d = seasonDraft;
+    let touched = !!(d && d.touched);
+    let kind = d ? d.kind : 'Saison', picked = d && touched ? d.picked.filter(n => act.includes(n)) : act.slice(), quota = d ? d.quota : 10;
+    let name = d ? d.name : defName(kind);
+    const keep = () => { seasonDraft = { kind, picked: picked.slice(), quota, name, touched }; };
     const box = h('div', { class: 'card stack' });
     const draw = () => {
+      keep();
       const inter = kind === 'Intersaison';
       const nameIn = h('input', { type: 'text', id: 'ns-name', value: name, 'aria-label': inter ? 'Nom de l’intersaison' : 'Nom de la saison' });
-      nameIn.addEventListener('input', () => { name = nameIn.value; });
+      nameIn.addEventListener('input', () => { name = nameIn.value; keep(); });
       const bad = badText(name.trim(), 60);
-      box.replaceChildren(
+      box.replaceChildren(...[
         h('h2', { class: 'sec-h' }, inter ? 'Nouvelle intersaison' : 'Nouvelle saison'),
         chips(['Saison', 'Intersaison'], { selected: [kind], onChange: v => { if (name === defName(kind)) name = defName(v[0]); kind = v[0]; draw(); } }),
         h('div', {}, h('div', { class: 'lbl hint' }, 'Nom'), nameIn),
         inter ? null : h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs classés (une fois la saison lancée, plus d’ajout)'),
-          chips(act, { multi: true, selected: picked, onChange: v => { picked = v; draw(); } })),
+          chips(act, { multi: true, selected: picked, onChange: v => { picked = v; touched = true; draw(); } })),
         inter ? null : h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
           h('div', { class: 'stepper' },
             h('button', { type: 'button', 'aria-label': 'Moins', disabled: quota <= 1, onclick: () => { quota--; draw(); } }, '−'), h('output', {}, String(quota)),
@@ -1078,6 +1087,7 @@ const Core = (() => {
           ? h('p', { class: 'hint' }, 'Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison. Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement.')
           : (picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.')),
         h('button', { type: 'button', class: 'btn primary', disabled: !name.trim() || !!bad || (inter ? act.length < 2 : picked.length < 2), onclick: () => {
+          seasonDraft = null;
           if (inter) {
             const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'inter', quota: 1, players: act.slice().sort(fr) };
             state.seasons.push(s); logEntry(s.name + ' ouverte (sans classement)', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
@@ -1085,7 +1095,7 @@ const Core = (() => {
           }
           const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'en_cours', quota, players: picked.slice().sort(fr) };
           state.seasons.push(s); logEntry(s.name + ' ouverte : ' + s.players.join(', ') + ', ' + quota + ' matchs par duo', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
-        } }, inter ? 'Ouvrir l’intersaison' : 'Ouvrir la saison'));
+        } }, inter ? 'Ouvrir l’intersaison' : 'Ouvrir la saison')].filter(Boolean));
     };
     draw();
     return box;
@@ -1120,9 +1130,27 @@ const Core = (() => {
     }
   }
 
+  /* Groupe tout neuf : aucun joueur. On explique par où commencer. */
+  const isEmptyGroup = () => state.players.length === 0 && (!API || net.loaded);
+  function welcomeCard() {
+    const go = () => {
+      if (location.hash !== '#saison') location.hash = 'saison';
+      setTimeout(() => { const i = document.getElementById('new-player'); if (i) { i.focus(); if (i.scrollIntoView) i.scrollIntoView({ block: 'center' }); } }, 120);
+    };
+    return h('div', { class: 'card stack welcome' },
+      h('h2', { class: 'sec-h' }, 'Bienvenue dans Barniotte'),
+      h('p', {}, 'Ce groupe est vide. Pour démarrer :'),
+      h('ol', { class: 'steps' },
+        h('li', {}, h('b', {}, 'Ajoute les joueurs'), ' dans l’onglet Saison, section Joueurs.'),
+        h('li', {}, h('b', {}, 'Ouvre une saison'), ' (ou une intersaison, sans classement) avec ces joueurs.'),
+        h('li', {}, h('b', {}, 'Choisis ton nom'), ' quand l’appli le demande, puis enregistre le premier match avec le bouton +.')),
+      h('button', { type: 'button', class: 'btn primary', onclick: go }, 'Ajouter les joueurs'));
+  }
+
   function viewSaison() {
     const s = curSeason();
     const out = h('div', { class: 'stack' });
+    if (isEmptyGroup()) out.append(welcomeCard());
     if (!API) out.append(h('p', { class: 'note' }, 'Prototype : les données restent sur cet appareil. La synchronisation avec Google Sheets viendra ensuite.'));
 
     if (API) out.append(h('div', { class: 'card' }, linkBtn('regles.html', 'Règles')));
@@ -1169,7 +1197,8 @@ const Core = (() => {
           h('button', { type: 'button', class: 'chip' + (p.active ? ' on' : ''), 'aria-pressed': p.active ? 'true' : 'false', onclick: () => { p.active = !p.active; commit(); } }, p.active ? 'Actif' : 'Inactif'),
           h('button', { type: 'button', class: 'chip del', 'aria-label': 'Supprimer ' + p.name, onclick: () => deletePlayer(p) }, 'Supprimer'))));
     });
-    const input = h('input', { type: 'text', id: 'new-player', placeholder: 'Nom du nouveau joueur', 'aria-label': 'Nom du nouveau joueur' });
+    const input = h('input', { type: 'text', id: 'new-player', placeholder: 'Nom du nouveau joueur', 'aria-label': 'Nom du nouveau joueur', value: playerDraft });
+    input.addEventListener('input', () => { playerDraft = input.value; });
     const add = () => {
       const n = input.value.trim();
       if (!n) return;
@@ -1177,6 +1206,7 @@ const Core = (() => {
       if (bad) { toast(bad); return; }
       const sans = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
       if (state.players.some(p => sans(p.name) === sans(n))) { toast(n + ' existe déjà.'); return; }
+      playerDraft = '';
       state.players.push({ name: n, active: true, c: Math.max(-1, ...state.players.map(q => (q.c == null ? -1 : q.c))) + 1 }); logEntry('Joueur ajouté : ' + n, null); commit(); toast(n + ' ajouté à la liste.');
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
@@ -1299,13 +1329,16 @@ const Core = (() => {
   }
 
   /* Reprend l'état du serveur en gardant les mêmes objets, pour que les fenêtres ouvertes restent valables. */
+  const stamp = () => JSON.stringify([state.players, state.seasons, state.matches, state.log]);
   function adopt(srv, rev) {
+    const before = stamp(), wasLoaded = net.loaded;
     mergeList(state.players, srv.players, p => p.name);
     mergeList(state.seasons, srv.seasons, s => String(s.id));
     mergeList(state.matches, srv.matches, m => String(m.id));
     state.log = srv.log;
     net.rev = rev; net.loaded = true;
-    takeSnap(); save(); render();
+    takeSnap(); save();
+    if (!wasLoaded || before !== stamp()) render();
   }
 
   async function call(action, extra) {
@@ -1346,6 +1379,8 @@ const Core = (() => {
   async function syncNow(force) {
     if (!API || !code) return;
     if (net.busy) { net.again = true; return; }
+    const viewKey = () => [net.loaded, net.version, net.pin, net.pinned.join(','), net.state === 'sync' ? 'ok' : net.state, net.error].join('|');
+    const view0 = viewKey();
     net.busy = true; net.state = 'sync'; paintNet();
     try {
       if (outbox.length) await flush();
@@ -1364,7 +1399,8 @@ const Core = (() => {
         net.state = 'locked'; paintNet(); askCode('Le code d’accès a changé ou n’est plus valable. Saisis le nouveau.');
       } else if (e.server) { net.state = 'error'; net.error = e.message; } else net.state = 'offline';
     } finally {
-      net.busy = false; paintNet(); render();
+      net.busy = false; paintNet();
+      if (view0 !== viewKey()) render();
       if (readyDone && net.loaded && needsPin() && !openSh) enterIdentity(me);
       if (net.again) { net.again = false; setTimeout(() => syncNow(false), 200); }
     }
