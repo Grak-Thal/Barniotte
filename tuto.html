@@ -100,9 +100,9 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
   <p><label><input type="checkbox" id="opt-pin"> <b>Activer les codes PIN des joueurs</b> (facultatif)</label></p>
   <p class="hint">Si tu coches, chaque joueur crée un code à 6 chiffres la première fois qu’il choisit son nom dans l’appli, et le redonne en changeant de téléphone. Cinq essais ratés bloquent le nom 15 minutes. C’est utile si tout le monde ne se connaît pas bien. Tu peux le changer plus tard.</p>
   <div id="admin-box" hidden>
-    <p><label for="admin-name"><b>Ton nom de joueur (tu seras administrateur)</b></label><br>
+    <p><label for="admin-name"><b>Ton nom de joueur (obligatoire avec les codes PIN, tu seras administrateur)</b></label><br>
     <input type="text" id="admin-name" maxlength="40" autocomplete="off" placeholder="Exactement comme tu l’écriras dans l’appli" style="max-width:22em"></p>
-    <p class="hint" id="admin-msg" aria-live="polite">Avec les codes PIN, seuls les administrateurs peuvent ouvrir ou clôturer une saison, ajouter ou retirer des joueurs, corriger un match terminé et changer le code d’accès. Tu pourras nommer d’autres administrateurs depuis l’appli. Sans nom ici, tous les joueurs sont administrateurs.</p>
+    <p class="hint" id="admin-msg" aria-live="polite">Avec les codes PIN, seuls les administrateurs peuvent ouvrir ou clôturer une saison, ajouter ou retirer des joueurs, corriger un match terminé et changer le code d’accès. Tu pourras nommer d’autres administrateurs depuis l’appli. Écris-le exactement comme tu le choisiras dans l’appli (les majuscules et accents sont tolérés).</p>
   </div>
   <div class="row"><button class="primary" id="copy-script" disabled>Copier le script avec mon code</button></div>
   <p id="copy-msg" class="hint" aria-live="polite"></p>
@@ -178,7 +178,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
     <tr><td>Changer le code d’accès</td><td>Génère un nouveau code (étape 2), remplace-le dans la ligne <code>const CODE = '…'</code> du script, enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Envoie le nouveau lien d’invitation : chacun saisit ou ouvre le nouveau lien une fois.</td></tr>
     <tr><td>Mettre à jour le script</td><td>Quand l’appli indique dans l’onglet Gestion que le script du groupe n’est pas à jour, reviens sur cette page. À l’étape 2, ouvre « J’ai déjà un code » et saisis ton code actuel, puis fais l’étape 3. Ensuite, la <b>Nouvelle version</b> du déploiement (comme ci-dessus). L’adresse du script ne change pas : les liens déjà envoyés fonctionnent toujours.</td></tr>
     <tr><td>Activer ou arrêter les codes PIN</td><td>Dans le script, ligne <code>const PIN_ACTIF = …;</code> : <code>true</code> pour activer, <code>false</code> pour arrêter. Enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Les codes déjà créés sont conservés.</td></tr>
-    <tr><td>Changer le code d’accès du groupe, nommer un administrateur</td><td>Dans l’appli, onglet <b>Gestion</b>, carte <b>Administration</b> (réservée aux administrateurs). Le nouveau lien d’invitation s’affiche : envoie-le aux joueurs de confiance.</td></tr>
+    <tr><td>Changer le code d’accès du groupe, nommer un administrateur</td><td>Dans l’appli, onglet <b>Gestion</b>, carte <b>Administration</b> (réservée aux administrateurs). Le nouveau lien d’invitation s’affiche : envoie-le aux joueurs de confiance. Une fois le code changé dans l’appli, la ligne <code>const CODE</code> du script est ignorée ; pour revenir à elle, lance la fonction <code>oublierCodeAppli</code> dans l’éditeur.</td></tr>
     <tr><td>Un joueur a oublié son code PIN</td><td>Dans le script, écris son nom entre les guillemets de <code>const JOUEUR_PIN_A_REINITIALISER = '';</code>, enregistre, choisis la fonction <code>reinitialiserPin</code> dans la liste et clique sur <b>Exécuter</b>. Il crée un nouveau code en choisissant son nom dans l’appli.</td></tr>
     <tr><td>Ajouter ou retirer un joueur</td><td>Dans l’appli, onglet Gestion, section Joueurs. Un joueur ajouté joue à partir de la saison suivante.</td></tr>
     <tr><td>Corriger un match</td><td>Dans l’appli : onglet Matchs, ouvre le match. Les corrections sont notées dans le journal.</td></tr>
@@ -339,7 +339,7 @@ function doPost(e) {
     if (req.action === 'pin_check') return out_(pinCheck_(req.name, req.pin));
     if (req.action === 'logout') return out_(deconnecter_(req.token));
     if (req.action === 'admin_set') return out_(adminSet_(req.token, req.name, req.admin === true));
-    if (req.action === 'pin_reset') return out_(pinReset_(req.token, req.name));
+    if (req.action === 'pin_reset') return out_(pinReset_(req.token, req.name, req.pin));
     if (req.action === 'code_change') return out_(codeChange_(req.token, req.newcode));
     return out_({ ok: false, error: 'action' });
   } catch (err) {
@@ -454,12 +454,17 @@ function checkOp_(op) {
   switch (op.t) {
     case 'match': {
       if (!r || !r.id || !r.a || !r.b || r.a === r.b) return 'match incomplet';
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(r.id))) return 'identifiant de match invalide';
       if (!txt_(r.id, 40) || !txt_(r.a, 40) || !txt_(r.b, 40) || !txt_(r.by, 40, true)) return 'texte invalide';
       if (STATUTS.indexOf(r.status) < 0) return 'statut de match inconnu';
-      if (!isFinite(Number(r.season))) return 'saison invalide';
+      if (!/^\d{1,6}$/.test(String(r.season))) return 'saison invalide';
       if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(String(r.ts || ''))) return 'horodatage invalide';
       if (r.mods != null && !Array.isArray(r.mods)) return 'coups invalides';
       if (!liste_(r.mods, 8, 60)) return 'coups invalides';
+      if (r.status !== 'termine') {
+        const pt = function (x) { return x == null || x === '' || (Number.isInteger(x) && x >= 0 && x <= 7); };
+        if (!pt(r.sa) || !pt(r.sb)) return 'score invalide';
+      }
       if (r.status === 'termine') {
         const sa = r.sa, sb = r.sb;
         if (!Number.isInteger(sa) || !Number.isInteger(sb) || sa < 0 || sb < 0 || Math.max(sa, sb) !== 7 || sa === sb) return 'score invalide : ' + sa + '-' + sb;
@@ -468,11 +473,12 @@ function checkOp_(op) {
     }
     case 'season':
       if (!r || r.id == null || !r.name) return 'saison incomplète';
-      if (!txt_(String(r.id), 20) || !txt_(r.name, 60) || !txt_(r.start, 10, true) || !txt_(r.end, 10, true) || !txt_(r.status, 20, true) || !liste_(r.players, 40, 40)) return 'texte invalide';
+      if (!/^\d{1,6}$/.test(String(r.id)) || !txt_(r.name, 60) || !txt_(r.start, 10, true) || !txt_(r.end, 10, true) || !txt_(r.status, 20, true) || !liste_(r.players, 40, 40)) return 'texte invalide';
       if (r.quota != null && !(Number.isInteger(Number(r.quota)) && Number(r.quota) >= 1 && Number(r.quota) <= 500)) return 'quota invalide';
       return null;
     case 'player':
       if (!r || !r.name) return 'joueur incomplet';
+      if (typeof r.active !== 'boolean') return 'joueur invalide';
       return txt_(r.name, 40) ? null : 'nom de joueur invalide';
     case 'seasonDel':
       return op.id != null && txt_(String(op.id), 20) ? null : 'saison invalide';
@@ -534,9 +540,9 @@ function verifierOps_(ops) {
     if (PIN_ACTIF && ((op.t === 'player' && op.row.active === false) || op.t === 'playerDel')) {
       const cible = op.t === 'player' ? op.row.name : op.name;
       const liste = admins_();
-      if (liste.length && liste.indexOf(cible) >= 0) {
+      if (liste.length && estDans_(liste, cible)) {
         if (actifs === null) actifs = readTab_('Joueurs').filter(function (r) { return oui_(r[1]); }).map(function (r) { return text_(r[0]); });
-        const reste = liste.filter(function (a) { return a !== cible && actifs.indexOf(a) >= 0; });
+        const reste = liste.filter(function (a) { return norm_(a) !== norm_(cible) && actifs.indexOf(a) >= 0; });
         if (!reste.length) throw new Error('dernier_admin');
         actifs = actifs.filter(function (a) { return a !== cible; });
       }
@@ -609,6 +615,7 @@ function applyOp_(op, now) {
     if (at) sh.deleteRow(at);
     pinOublier_(op.name);
     sessionsRevoquer_(op.name);
+    PropertiesService.getScriptProperties().setProperty('admins', JSON.stringify(adminsDyn_().filter(function (n) { return n !== op.name; })));
   } else if (op.t === 'log') {
     insertTop_(sheet_('Journal'), 'Journal', [r.ts, r.by || '', r.match == null ? '' : String(r.match), r.what]);
   }
@@ -657,7 +664,12 @@ function admins_() {
 }
 function estAdmin_(nom) {
   const a = admins_();
-  return a.length === 0 || a.indexOf(nom) >= 0;
+  return a.length === 0 || estDans_(a, nom);
+}
+/* Comparaison sans tenir compte des accents ni des majuscules, comme pour l'unicité des noms de joueurs. */
+function estDans_(liste, nom) {
+  const n = norm_(nom);
+  return liste.some(function (x) { return norm_(x) === n; });
 }
 
 /* ----- Sessions ----- */
@@ -736,13 +748,23 @@ function autoriser_(ops, c) {
     if (op.t === 'log') { r.by = c.nom; return; }
     if (op.t === 'match') {
       const ex = matchs[String(r.id)];
-      if (!ex) { r.by = c.nom; return; }
+      if (!ex) {
+        r.by = c.nom;
+        if (!c.admin) {
+          // un joueur ordinaire ne crée des matchs que dans la saison ouverte, entre deux joueurs actifs (un match joué hors ligne arrive déjà terminé)
+          const saison = readTab_('Saisons').filter(function (x) { return text_(x[0]) === String(r.season); })[0];
+          const st = saison ? text_(saison[4]) : '';
+          if (st !== 'en_cours' && st !== 'inter') throw new Error('admin');
+          [r.a, r.b].forEach(function (n) { if (!joueurs[n] || !oui_(joueurs[n][1])) throw new Error('admin'); });
+        }
+        return;
+      }
       const statut = text_(ex[7]), auteur = text_(ex[9]);
       r.by = auteur;
       if (statut === 'en_cours' && auteur === c.nom) return;
       if (statut === 'termine' && auteur === c.nom) {
         const fin = num_(ex[11]);
-        if (fin && Date.now() - fin <= DELAI_MATCH_MIN * 60000) return;
+        if (fin && Date.now() - fin <= DELAI_MATCH_MIN * 60000 && r.status !== 'en_cours') return;
         tropTard = true;
       }
       besoinAdmin = true;
@@ -783,9 +805,12 @@ function pinSet_(nom, pin) {
     migrer_();
     const ligne = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === nom; })[0];
     if (!ligne) {
-      // Premier démarrage : le créateur, écrit dans ADMINS, est ajouté comme joueur quand il choisit son nom.
-      if (admins_().indexOf(nom) < 0 || !txt_(nom, 40)) return { ok: false, error: 'joueur' };
-      append_(sheet_('Joueurs'), 'Joueurs', [nom, 'oui', readTab_('Joueurs').length]);
+      // Premier démarrage seulement : si aucun joueur n'existe encore, le créateur (nom écrit dans ADMINS, accents et majuscules ignorés) est ajouté en choisissant son nom.
+      const nomsExistants = readTab_('Joueurs').map(function (r) { return text_(r[0]); }).filter(Boolean);
+      const voulu = ADMINS.filter(function (a) { return norm_(a) === norm_(nom); })[0];
+      if (nomsExistants.length || !voulu) return { ok: false, error: 'joueur' };
+      nom = voulu;
+      append_(sheet_('Joueurs'), 'Joueurs', [nom, 'oui', 0]);
     } else if (!oui_(ligne[1])) return { ok: false, error: 'inactif' };
     const pins = pinLire_('pins');
     if (pins[nom]) return pinInfo_({ ok: false, error: 'pin_deja' });
@@ -844,6 +869,7 @@ function adminSet_(token, nom, valeur) {
     if (typeof nom !== 'string' || !nom || nom.length > 40) throw new Error('joueur');
     const ligne = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === nom; })[0];
     if (!ligne || !oui_(ligne[1])) throw new Error('joueur');
+    if (valeur && !pinLire_('pins')[nom]) throw new Error('joueur_sans_pin');
     let dyn = adminsDyn_();
     if (valeur) { if (dyn.indexOf(nom) < 0 && ADMINS.indexOf(nom) < 0) dyn.push(nom); }
     else {
@@ -859,11 +885,18 @@ function adminSet_(token, nom, valeur) {
   });
 }
 
-function pinReset_(token, nom) {
+/* L'administrateur choisit un nouveau PIN et le transmet au joueur : le nom n'est jamais libre, donc personne ne peut le réclamer entre-temps. */
+function pinReset_(token, nom, pin) {
   return avecVerrou_(function () {
     exigerAdmin_(contexte_(token));
     if (typeof nom !== 'string' || !nom || nom.length > 40) throw new Error('joueur');
-    pinOublier_(nom);
+    if (!pinFormat_(pin)) throw new Error('pin_format');
+    const ligne = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === nom; })[0];
+    if (!ligne) throw new Error('joueur');
+    const pins = pinLire_('pins'), essais = pinLire_('pinessais');
+    pins[nom] = pinEmpreinte_(nom, pin);
+    delete essais[nom];
+    pinEcrire_('pins', pins); pinEcrire_('pinessais', essais);
     sessionsRevoquer_(nom);
     bumpRev_();
     return pinInfo_({ ok: true });
@@ -877,6 +910,12 @@ function codeChange_(token, nouveau) {
     PropertiesService.getScriptProperties().setProperty('code', nouveau);
     return { ok: true };
   });
+}
+
+/* À lancer à la main si le code d'accès a été changé depuis l'appli : le script revient au code écrit en haut (const CODE). */
+function oublierCodeAppli() {
+  PropertiesService.getScriptProperties().deleteProperty('code');
+  Logger.log('Le code d’accès est de nouveau celui écrit dans le script.');
 }
 
 /* À lancer à la main depuis l'éditeur, après avoir écrit le nom dans JOUEUR_PIN_A_REINITIALISER (en haut du script). */
@@ -930,6 +969,7 @@ function reinitialiserTousLesPin() {
     var raw = $('admin-name').value.trim();
     $('admin-name').setAttribute('aria-invalid', raw && !adminName() ? 'true' : 'false');
     if (code) $('script-view').value = script();
+    $('copy-script').disabled = !code || ($('opt-pin').checked && !adminName());
   }
 
   function copy(text, msgEl, okText) {
@@ -949,8 +989,8 @@ function reinitialiserTousLesPin() {
   function setCode(c) {
     code = c;
     $('code').hidden = false; $('code').textContent = code;
-    $('copy-script').disabled = false;
     $('script-view').value = script();
+    adminUi();
     $('gen').textContent = 'Générer un autre code';
     refreshInvite();
   }
