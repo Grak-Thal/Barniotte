@@ -145,12 +145,12 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
   <h2>Lance ta première saison</h2>
   <ol>
     <li>Ouvre le lien d’invitation sur ton téléphone ou ton ordinateur, puis confirme <b class="ui">Rejoindre</b>.</li>
-    <li>Va dans l’onglet <b class="ui">Saison</b> : ajoute les joueurs un par un.</li>
+    <li>Va dans l’onglet <b class="ui">Gestion</b> : ajoute les joueurs un par un.</li>
     <li>Toujours dans cet onglet, choisis les joueurs classés, le nombre de matchs par duo, puis clique sur <b class="ui">Ouvrir la saison</b>.</li>
     <li>Choisis ton nom quand l’appli demande « Qui es-tu ? ». C’est le bouton <b class="ui">+</b> qui lance un match.</li>
     <li>Envoie le lien d’invitation aux autres joueurs. Pour que l’appli reste sur l’écran d’accueil : sur iPhone, bouton Partager de Safari puis « Sur l’écran d’accueil » ; sur Android, menu ⋮ de Chrome puis « Ajouter à l’écran d’accueil ».</li>
   </ol>
-  <p class="note">Les règles de l’appli sont celles de la Barniote : le premier à 7 points gagne, il n’y a pas de match nul. Le bouton <b class="ui">Règles</b> de l’onglet Saison ouvre le texte complet.</p>
+  <p class="note">Les règles de l’appli sont celles de la Barniote : le premier à 7 points gagne, il n’y a pas de match nul. Le bouton <b class="ui">Règles</b> de l’onglet Gestion ouvre le texte complet.</p>
 </div>
 
 <div class="step">
@@ -171,10 +171,10 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
   <table>
     <tr><th>Je veux…</th><th>Je fais…</th></tr>
     <tr><td>Changer le code d’accès</td><td>Génère un nouveau code (étape 2), remplace-le dans la ligne <code>const CODE = '…'</code> du script, enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Envoie le nouveau lien d’invitation : chacun saisit ou ouvre le nouveau lien une fois.</td></tr>
-    <tr><td>Mettre à jour le script</td><td>Quand l’appli indique dans l’onglet Saison que le script du groupe n’est pas à jour, reviens sur cette page. À l’étape 2, ouvre « J’ai déjà un code » et saisis ton code actuel, puis fais l’étape 3. Ensuite, la <b>Nouvelle version</b> du déploiement (comme ci-dessus). L’adresse du script ne change pas : les liens déjà envoyés fonctionnent toujours.</td></tr>
+    <tr><td>Mettre à jour le script</td><td>Quand l’appli indique dans l’onglet Gestion que le script du groupe n’est pas à jour, reviens sur cette page. À l’étape 2, ouvre « J’ai déjà un code » et saisis ton code actuel, puis fais l’étape 3. Ensuite, la <b>Nouvelle version</b> du déploiement (comme ci-dessus). L’adresse du script ne change pas : les liens déjà envoyés fonctionnent toujours.</td></tr>
     <tr><td>Activer ou arrêter les codes PIN</td><td>Dans le script, ligne <code>const PIN_ACTIF = …;</code> : <code>true</code> pour activer, <code>false</code> pour arrêter. Enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Les codes déjà créés sont conservés.</td></tr>
     <tr><td>Un joueur a oublié son code PIN</td><td>Dans le script, écris son nom entre les guillemets de <code>const JOUEUR_PIN_A_REINITIALISER = '';</code>, enregistre, choisis la fonction <code>reinitialiserPin</code> dans la liste et clique sur <b>Exécuter</b>. Il crée un nouveau code en choisissant son nom dans l’appli.</td></tr>
-    <tr><td>Ajouter ou retirer un joueur</td><td>Dans l’appli, onglet Saison, section Joueurs. Un joueur ajouté joue à partir de la saison suivante.</td></tr>
+    <tr><td>Ajouter ou retirer un joueur</td><td>Dans l’appli, onglet Gestion, section Joueurs. Un joueur ajouté joue à partir de la saison suivante.</td></tr>
     <tr><td>Corriger un match</td><td>Dans l’appli : onglet Matchs, ouvre le match. Les corrections sont notées dans le journal.</td></tr>
     <tr><td>Supprimer un match de test</td><td>Dans le Sheet, onglet Matchs, remplace <code>termine</code> par <code>annule</code> dans la colonne statut.</td></tr>
   </table>

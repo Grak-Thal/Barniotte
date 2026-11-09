@@ -272,8 +272,8 @@ input[type="text"] { width: 100%; border: 1px solid var(--line); background: var
       Matchs
     </button>
     <button type="button" class="tab" data-tab="saison">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
-      Saison
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+      Gestion
     </button>
   </div>
 </nav>
@@ -396,7 +396,7 @@ const Core = (() => {
   const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
   const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
   const LATEST_SCRIPT = 4;             // dernière version du script serveur connue de cette appli
-  const APP_STAGE = 'bêta', APP_VERSION = '0.4';
+  const APP_STAGE = 'bêta', APP_VERSION = '0.5';
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
@@ -410,6 +410,22 @@ const Core = (() => {
     ['barniotte-cache-v1', 'barniotte-code', 'barniotte-outbox', 'barniotte-proto-me'].forEach(k => { const v = lsGet(k); if (v != null && lsGet(k + NS) == null) lsSet(k + NS, v); });
     lsSet('barniotte-api', API);
   }
+  /* Groupes connus de ce téléphone : adresse + nom local. Le code d'accès et les données de chaque groupe restent rangés sous leur propre suffixe NS. */
+  const GROUPS_KEY = 'barniotte-groupes';
+  const readGroups = () => {
+    try {
+      const g = JSON.parse(lsGet(GROUPS_KEY) || '[]');
+      return Array.isArray(g) ? g.filter(x => x && typeof x.api === 'string' && API_RE.test(x.api)).map(x => ({ api: x.api, nom: typeof x.nom === 'string' ? x.nom.slice(0, 40) : '' })) : [];
+    } catch (e) { return []; }
+  };
+  const writeGroups = g => lsSet(GROUPS_KEY, JSON.stringify(g));
+  function rememberGroup(apiX, nom) {
+    const g = readGroups(), i = g.findIndex(x => x.api === apiX);
+    if (i < 0) g.push({ api: apiX, nom: nom || '' }); else if (nom) g[i].nom = nom;
+    writeGroups(g);
+  }
+  const groupLabel = (g, i) => g.nom || ('Groupe ' + (i + 1) + ' (…' + g.api.split('/')[5].slice(-4) + ')');
+  if (API) rememberGroup(API);
   const KEY = API ? 'barniotte-cache-v1' + NS : 'barniotte-proto-v2', ME_KEY = 'barniotte-proto-me' + NS;
   /* Texte libre accepté par le serveur : court, sans caractère de contrôle, et qui ne commence pas comme une formule. */
   const badText = (v, max) => v.length > max ? 'Texte trop long (' + max + ' caractères au maximum).' : (/[\u0000-\u001f\u007f]/.test(v) || /^[=+\-@]/.test(v) ? 'Le texte ne doit pas commencer par = + - ou @.' : '');
@@ -573,7 +589,7 @@ const Core = (() => {
   /* ---------- Flux : nouveau match ---------- */
   function startMatch() {
     const s = curSeason();
-    if (!s) { toast('Aucune saison ouverte. Ouvre-en une dans l’onglet Saison.'); return; }
+    if (!s) { toast('Aucune saison ouverte. Ouvre-en une dans l’onglet Gestion.'); return; }
     const sh = openSheet();
     let A = null, B = null;
     const players = seasonPlayers(s);
@@ -1141,7 +1157,7 @@ const Core = (() => {
       h('h2', { class: 'sec-h' }, 'Bienvenue'),
       h('p', {}, 'Ce groupe est vide. Pour démarrer :'),
       h('ol', { class: 'steps' },
-        h('li', {}, h('b', {}, 'Ajoute les joueurs'), ' dans l’onglet Saison, section Joueurs.'),
+        h('li', {}, h('b', {}, 'Ajoute les joueurs'), ' dans l’onglet Gestion, section Joueurs.'),
         h('li', {}, h('b', {}, 'Ouvre une saison'), ' (ou une intersaison, sans classement) avec ces joueurs.'),
         h('li', {}, h('b', {}, 'Choisis ton nom'), ' quand l’appli le demande, puis enregistre le premier match avec le bouton +.')),
       h('button', { type: 'button', class: 'btn primary', onclick: go }, 'Ajouter les joueurs'));
@@ -1215,6 +1231,7 @@ const Core = (() => {
 
     if (API && code) {
       const linkBox = h('div');
+      out.append(groupsCard());
       out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Connexion au Google Sheet'),
         h('p', { class: 'hint' }, 'Les matchs sont enregistrés dans le Sheet et partagés entre tous les téléphones connectés.'),
         h('div', { class: 'btns' },
@@ -1229,7 +1246,7 @@ const Core = (() => {
         net.version != null && net.version < LATEST_SCRIPT ? h('p', { class: 'hint' }, 'Le script de ce groupe est en version ' + net.version + ' (la dernière est ' + LATEST_SCRIPT + '). Tout fonctionne, mais l’organisateur peut le mettre à jour avec le guide.') : null,
         h('div', { class: 'btns' },
           h('button', { type: 'button', class: 'btn ghost', onclick: () => { code = ''; try { localStorage.removeItem(CODE_KEY); } catch (e) { /* ignoré */ } net.state = 'locked'; paintNet(); askCode(); } }, 'Changer de code'),
-          h('button', { type: 'button', class: 'btn ghost', onclick: leaveGroup }, 'Quitter le groupe'))));
+          h('button', { type: 'button', class: 'btn ghost', onclick: () => leaveGroup() }, 'Quitter le groupe'))));
     }
 
     const arch = state.seasons.filter(isArch);
@@ -1253,9 +1270,14 @@ const Core = (() => {
     }
 
     const lg = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Journal des modifications'));
-    const ul = h('ul', { class: 'log' });
-    state.log.slice(0, 40).forEach(e => ul.append(h('li', {}, h('time', {}, fmtStamp(e.ts) + ' · ' + e.by), h('span', {}, e.what))));
-    lg.append(state.log.length ? ul : h('p', { class: 'hint' }, 'Aucune modification pour le moment.'));
+    const logItems = list => list.map(e => h('li', {}, h('time', {}, fmtStamp(e.ts) + ' · ' + e.by), h('span', {}, e.what)));
+    if (!state.log.length) lg.append(h('p', { class: 'hint' }, 'Aucune modification pour le moment.'));
+    else {
+      lg.append(h('ul', { class: 'log' }, logItems(state.log.slice(0, 5))));
+      if (state.log.length > 5) lg.append(h('details', { class: 'logall' },
+        h('summary', {}, 'Liste complète (' + state.log.length + ')'),
+        h('ul', { class: 'log', style: 'margin-top:8px' }, logItems(state.log.slice(0, 300)))));
+    }
     out.append(lg);
 
     out.append(h('p', { class: 'hint ver' }, 'Barniotte ' + APP_STAGE + ' ' + APP_VERSION + (API && net.version != null ? ' · script v' + net.version : '')));
@@ -1437,6 +1459,14 @@ const Core = (() => {
   }
 
   /* Rejoindre un groupe depuis un lien : on contrôle l'adresse, on vérifie que c'est un serveur Barniotte, puis on demande confirmation. */
+  /* Lit un lien d'invitation collé : renvoie { api, code } ou null. */
+  function parseInvite(v) {
+    const a = /[#&?]api=([^&\s]+)/.exec(v), c = /[#&?]code=([^&\s]+)/.exec(v);
+    let apiV = '', codeV = '';
+    try { apiV = a ? decodeURIComponent(a[1]) : ''; codeV = c ? decodeURIComponent(c[1]) : ''; } catch (e) { apiV = ''; }
+    return apiV ? { api: apiV, code: codeV } : null;
+  }
+
   async function joinGroup(apiC, codeC) {
     const sh = openSheet(true);
     const stop = msg => sh.set(h('h2', {}, 'Lien non valide'), h('p', {}, msg),
@@ -1450,26 +1480,112 @@ const Core = (() => {
     } catch (e) { info = null; }
     if (!info || info.service !== 'Barniotte') { stop('Ce lien ne mène pas à un groupe Barniotte, ou le serveur ne répond pas. Vérifie le lien auprès de l’organisateur.'); return; }
     const id = apiC.split('/')[5];
+    const known = readGroups().find(x => x.api === apiC);
+    const nomIn = h('input', { type: 'text', id: 'group-name', maxlength: '40', placeholder: 'Nom de ce groupe (ex. Bureau de Lyon)', 'aria-label': 'Nom de ce groupe sur ce téléphone', value: known ? known.nom : '' });
     sh.set(h('h2', {}, 'Rejoindre ce groupe ?'),
       h('p', {}, 'Ce téléphone va se connecter à un Google Sheet de groupe (identifiant …' + id.slice(-6) + '). Les matchs que tu saisiras y seront enregistrés et visibles par ses membres.'),
+      API && API !== apiC ? h('p', { class: 'hint' }, 'Ton groupe actuel est gardé sur ce téléphone : tu pourras y revenir depuis l’onglet Gestion.') : null,
+      h('div', {}, h('div', { class: 'lbl hint' }, 'Nom du groupe sur ton téléphone (facultatif)'), nomIn),
       h('p', { class: 'hint' }, 'Ne continue que si le lien vient de l’organisateur de ton groupe.'),
       h('div', { class: 'btns' },
         h('button', { type: 'button', class: 'btn ghost', onclick: () => { sh.close(); render(); } }, 'Annuler'),
         h('button', { type: 'button', class: 'btn primary', onclick: () => {
+          const nom = nomIn.value.trim().slice(0, 40);
+          if (nom && badText(nom, 40)) { toast('Nom : ' + badText(nom, 40)); return; }
+          rememberGroup(apiC, nom);
           lsSet('barniotte-api', apiC);
           if (codeC) lsSet('barniotte-code' + nsOf(apiC), codeC);
           location.reload();
         } }, 'Rejoindre')));
   }
 
-  function leaveGroup() {
+  function askJoinLink() {
     const sh = openSheet();
+    const input = h('input', { type: 'text', id: 'join-link2', placeholder: 'Colle ici le lien d’invitation', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Lien d’invitation' });
+    const msg = h('p', { class: 'hint err', 'aria-live': 'polite' });
+    const go = () => {
+      const p = parseInvite(input.value.trim());
+      if (!p) { msg.textContent = 'Ce texte ne contient pas un lien d’invitation complet.'; return; }
+      sh.close(); joinGroup(p.api, p.code);
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    sh.set(h('h2', {}, 'Rejoindre un autre groupe'),
+      h('p', { class: 'hint' }, 'Colle le lien d’invitation reçu. Ton groupe actuel reste sur ce téléphone et tu pourras y revenir.'),
+      input, msg,
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'), h('button', { type: 'button', class: 'btn primary', onclick: go }, 'Continuer')));
+    setTimeout(() => input.focus(), 50);
+  }
+
+  /* Passer à un autre groupe déjà connu : rien n'est effacé, on change seulement de groupe actif. */
+  function switchGroup(apiX) {
+    const go = () => { lsSet('barniotte-api', apiX); location.reload(); };
+    if (!outbox.length) { go(); return; }
+    const sh = openSheet();
+    sh.set(h('h2', {}, 'Changer de groupe ?'),
+      h('p', { class: 'hint err' }, plural(outbox.length, 'modification n’est', 'modifications ne sont') + ' pas encore envoyée' + (outbox.length > 1 ? 's' : '') + '. Elle' + (outbox.length > 1 ? 's restent' : ' reste') + ' sur ce téléphone et partira à ton retour dans ce groupe.'),
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'), h('button', { type: 'button', class: 'btn primary', onclick: go }, 'Changer de groupe')));
+  }
+
+  function renameGroup(g) {
+    const sh = openSheet();
+    const input = h('input', { type: 'text', id: 'group-rename', maxlength: '40', value: g.nom, 'aria-label': 'Nom du groupe' });
+    const msg = h('p', { class: 'hint err' });
+    const save = () => {
+      const nom = input.value.trim().slice(0, 40), bad = badText(nom, 40);
+      if (bad) { msg.textContent = 'Nom : ' + bad; return; }
+      const all = readGroups(), i = all.findIndex(x => x.api === g.api);
+      if (i >= 0) { all[i].nom = nom; writeGroups(all); }
+      sh.close(); render();
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+    sh.set(h('h2', {}, 'Nom du groupe'), h('p', { class: 'hint' }, 'Ce nom reste sur ton téléphone. Il n’est pas partagé avec les autres joueurs.'), input, msg,
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'), h('button', { type: 'button', class: 'btn primary', onclick: save }, 'Enregistrer')));
+    setTimeout(() => input.focus(), 50);
+  }
+
+  /* Efface d'un téléphone tout ce qui concerne un groupe (code d'accès, copie des données, identité, envois en attente). */
+  function wipeGroup(apiX) {
+    const ns = nsOf(apiX), del = [];
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('barniotte-') && k.endsWith(ns)) del.push(k); } } catch (e) { /* ignoré */ }
+    del.forEach(lsDel);
+    writeGroups(readGroups().filter(x => x.api !== apiX));
+  }
+
+  function leaveGroup(apiX) {
+    const target = typeof apiX === 'string' ? apiX : API;
+    const sh = openSheet();
+    const isActive = target === API, pending = isActive ? outbox.length : 0;
     sh.set(h('h2', {}, 'Quitter ce groupe ?'),
-      h('p', {}, 'Ce téléphone se déconnecte du groupe. Les données restent dans le Sheet : tu pourras revenir avec le lien d’invitation.'),
-      outbox.length ? h('p', { class: 'hint err' }, plural(outbox.length, 'modification n’est', 'modifications ne sont') + ' pas encore envoyée' + (outbox.length > 1 ? 's' : '') + ' : reviens avec le même lien pour les envoyer.') : null,
+      h('p', {}, 'Le groupe est retiré de ce téléphone, avec son code d’accès. Les données restent dans le Sheet : tu pourras revenir avec le lien d’invitation.'),
+      pending ? h('p', { class: 'hint err' }, plural(pending, 'modification n’est', 'modifications ne sont') + ' pas encore envoyée' + (pending > 1 ? 's' : '') + ' : elles seront perdues.') : null,
       h('div', { class: 'btns' },
         h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
-        h('button', { type: 'button', class: 'btn danger', onclick: () => { lsDel('barniotte-api'); lsDel(CODE_KEY); location.reload(); } }, 'Quitter')));
+        h('button', { type: 'button', class: 'btn danger', onclick: () => {
+          wipeGroup(target);
+          if (isActive) {
+            const next = readGroups().find(x => x.api !== target);
+            if (next) lsSet('barniotte-api', next.api); else lsDel('barniotte-api');
+            location.reload();
+          } else { sh.close(); render(); }
+        } }, 'Quitter')));
+  }
+
+  /* Carte « Mes groupes » : groupes connus de ce téléphone. */
+  function groupsCard() {
+    const gs = readGroups();
+    const card = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Mes groupes'),
+      h('p', { class: 'hint' }, 'Pour passer d’un groupe à l’autre, par exemple en accueillant des collègues d’une autre ville. Chaque groupe garde ses données et ton identité.'));
+    gs.forEach((g, i) => {
+      const here = g.api === API;
+      card.append(h('div', { class: 'stack', style: 'gap:8px;padding:6px 0;border-top:1px solid var(--line)' },
+        h('div', {}, h('div', { class: 'nm' }, h('span', { class: 't' }, groupLabel(g, i))), here ? h('div', { class: 'hint' }, 'Groupe actuel') : null),
+        h('div', { class: 'btns', style: 'flex-wrap:wrap' },
+          here ? null : h('button', { type: 'button', class: 'btn primary', onclick: () => switchGroup(g.api) }, 'Passer à ce groupe'),
+          h('button', { type: 'button', class: 'btn ghost', 'aria-label': 'Renommer ' + groupLabel(g, i), onclick: () => renameGroup(g) }, 'Renommer'),
+          here || g.api === CONFIG_API ? null : h('button', { type: 'button', class: 'btn ghost', onclick: () => leaveGroup(g.api) }, 'Quitter'))));
+    });
+    card.append(h('button', { type: 'button', class: 'btn', onclick: askJoinLink }, 'Rejoindre un autre groupe'));
+    return card;
   }
 
   const linkBtn = (href, label) => h('a', { class: 'btn', href, style: 'display:block;text-align:center;text-decoration:none;color:inherit' }, label);
@@ -1478,13 +1594,10 @@ const Core = (() => {
     const input = h('input', { type: 'text', id: 'join-link', placeholder: 'Colle ici le lien d’invitation', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Lien d’invitation' });
     const msg = h('p', { class: 'hint err', 'aria-live': 'polite' });
     const go = () => {
-      const v = input.value.trim();
-      const a = /[#&?]api=([^&\s]+)/.exec(v), c = /[#&?]code=([^&\s]+)/.exec(v);
-      let apiV = '', codeV = '';
-      try { apiV = a ? decodeURIComponent(a[1]) : ''; codeV = c ? decodeURIComponent(c[1]) : ''; } catch (e) { apiV = ''; }
-      if (!apiV) { msg.textContent = 'Ce texte ne contient pas un lien d’invitation complet.'; return; }
+      const p = parseInvite(input.value.trim());
+      if (!p) { msg.textContent = 'Ce texte ne contient pas un lien d’invitation complet.'; return; }
       msg.textContent = '';
-      joinGroup(apiV, codeV);
+      joinGroup(p.api, p.code);
     };
     return h('div', { class: 'stack' },
       h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Bienvenue'),
