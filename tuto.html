@@ -99,10 +99,15 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
   </ol>
   <p><label><input type="checkbox" id="opt-pin"> <b>Activer les codes PIN des joueurs</b> (facultatif)</label></p>
   <p class="hint">Si tu coches, chaque joueur crée un code à 6 chiffres la première fois qu’il choisit son nom dans l’appli, et le redonne en changeant de téléphone. Cinq essais ratés bloquent le nom 15 minutes. C’est utile si tout le monde ne se connaît pas bien. Tu peux le changer plus tard.</p>
+  <div id="admin-box" hidden>
+    <p><label for="admin-name"><b>Ton nom de joueur (tu seras administrateur)</b></label><br>
+    <input type="text" id="admin-name" maxlength="40" autocomplete="off" placeholder="Exactement comme tu l’écriras dans l’appli" style="max-width:22em"></p>
+    <p class="hint" id="admin-msg" aria-live="polite">Avec les codes PIN, seuls les administrateurs peuvent ouvrir ou clôturer une saison, ajouter ou retirer des joueurs, corriger un match terminé et changer le code d’accès. Tu pourras nommer d’autres administrateurs depuis l’appli. Sans nom ici, tous les joueurs sont administrateurs.</p>
+  </div>
   <div class="row"><button class="primary" id="copy-script" disabled>Copier le script avec mon code</button></div>
   <p id="copy-msg" class="hint" aria-live="polite"></p>
   <p class="hint">Le bouton se débloque dès que ton code est généré (étape 2). Le script contient déjà ton code.</p>
-  <details><summary>Voir le script (version 4)</summary>
+  <details><summary>Voir le script (version 5)</summary>
     <p class="hint">Rien de caché : tu peux le relire. Il lit et écrit uniquement dans ce Sheet (4 onglets : Joueurs, Saisons, Matchs, Journal) et ne contacte aucun autre service. Les codes PIN ne sont jamais enregistrés : seule une empreinte l’est, dans les propriétés du script.</p>
     <textarea id="script-view" readonly spellcheck="false"></textarea>
   </details>
@@ -173,6 +178,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
     <tr><td>Changer le code d’accès</td><td>Génère un nouveau code (étape 2), remplace-le dans la ligne <code>const CODE = '…'</code> du script, enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Envoie le nouveau lien d’invitation : chacun saisit ou ouvre le nouveau lien une fois.</td></tr>
     <tr><td>Mettre à jour le script</td><td>Quand l’appli indique dans l’onglet Gestion que le script du groupe n’est pas à jour, reviens sur cette page. À l’étape 2, ouvre « J’ai déjà un code » et saisis ton code actuel, puis fais l’étape 3. Ensuite, la <b>Nouvelle version</b> du déploiement (comme ci-dessus). L’adresse du script ne change pas : les liens déjà envoyés fonctionnent toujours.</td></tr>
     <tr><td>Activer ou arrêter les codes PIN</td><td>Dans le script, ligne <code>const PIN_ACTIF = …;</code> : <code>true</code> pour activer, <code>false</code> pour arrêter. Enregistre, puis <b>Déployer → Gérer les déploiements → crayon → Version : Nouvelle version → Déployer</b>. Les codes déjà créés sont conservés.</td></tr>
+    <tr><td>Changer le code d’accès du groupe, nommer un administrateur</td><td>Dans l’appli, onglet <b>Gestion</b>, carte <b>Administration</b> (réservée aux administrateurs). Le nouveau lien d’invitation s’affiche : envoie-le aux joueurs de confiance.</td></tr>
     <tr><td>Un joueur a oublié son code PIN</td><td>Dans le script, écris son nom entre les guillemets de <code>const JOUEUR_PIN_A_REINITIALISER = '';</code>, enregistre, choisis la fonction <code>reinitialiserPin</code> dans la liste et clique sur <b>Exécuter</b>. Il crée un nouveau code en choisissant son nom dans l’appli.</td></tr>
     <tr><td>Ajouter ou retirer un joueur</td><td>Dans l’appli, onglet Gestion, section Joueurs. Un joueur ajouté joue à partir de la saison suivante.</td></tr>
     <tr><td>Corriger un match</td><td>Dans l’appli : onglet Matchs, ouvre le match. Les corrections sont notées dans le journal.</td></tr>
@@ -210,7 +216,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
  */
 
 const CODE = '__CODE__';
-const SCRIPT_VERSION = 4;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
+const SCRIPT_VERSION = 5;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
 const MAX_BODY = 400000;    // taille maximale d'une requête (caractères)
 
 /* Code PIN par joueur (option). Mettre true pour que chaque joueur crée un code à 6 chiffres la première fois qu'il choisit son nom.
@@ -221,10 +227,19 @@ const PIN_VERROU_MIN = 15;  // durée du blocage, en minutes
 /* Pour redonner à un joueur la possibilité de créer un nouveau code : écrire son nom ici, puis lancer reinitialiserPin(). */
 const JOUEUR_PIN_A_REINITIALISER = '';
 
+/* Administrateurs du groupe (créateur et joueurs de confiance), écrits comme dans l'appli : ['Camille', 'Noé'].
+   Avec les codes PIN actifs, eux seuls peuvent ouvrir ou clôturer une saison, ajouter ou retirer un joueur, corriger un match terminé,
+   changer le code d'accès et nommer d'autres administrateurs. Ceux écrits ici ne peuvent être retirés que depuis ce script.
+   Si la liste est vide (et qu'aucun administrateur n'a été nommé dans l'appli), tous les joueurs sont administrateurs. */
+const ADMINS = [];
+const SESSION_JOURS = 90;     // un téléphone identifié reste connu 90 jours après sa dernière utilisation
+const ADMIN_FENETRE_H = 4;    // une action d'administrateur redemande le PIN si le dernier date de plus de 4 heures
+const DELAI_MATCH_MIN = 10;   // l'auteur d'un match peut le corriger ou l'annuler pendant 10 minutes
+
 const TABS = {
   Joueurs: { cols: ['nom', 'actif', 'couleur'], text: [1, 2], widths: [120, 70, 80] },
   Saisons: { cols: ['id', 'nom', 'debut', 'fin', 'statut', 'quota', 'joueurs'], text: [1, 2, 3, 4, 5, 7], widths: [50, 130, 100, 100, 90, 60, 280] },
-  Matchs: { cols: ['id', 'saison', 'horodatage', 'joueur_a', 'joueur_b', 'score_a', 'score_b', 'statut', 'coups', 'saisi_par', 'modifie_le'], text: [1, 2, 3, 4, 5, 8, 9, 10, 11], widths: [70, 60, 150, 90, 90, 70, 70, 90, 220, 90, 150] },
+  Matchs: { cols: ['id', 'saison', 'horodatage', 'joueur_a', 'joueur_b', 'score_a', 'score_b', 'statut', 'coups', 'saisi_par', 'modifie_le', 'termine_ms'], text: [1, 2, 3, 4, 5, 8, 9, 10, 11, 12], widths: [70, 60, 150, 90, 90, 70, 70, 90, 220, 90, 150, 110] },
   Journal: { cols: ['horodatage', 'par', 'match', 'texte'], text: [1, 2, 3, 4], widths: [150, 90, 70, 620] }
 };
 const STATUTS = ['en_cours', 'termine', 'annule'];
@@ -295,7 +310,13 @@ function doGet() {
 
 /* Un code trop court ou jamais personnalisé ne doit jamais protéger des données. */
 function codeFaible_() {
-  return typeof CODE !== 'string' || CODE.length < 16 || CODE.indexOf('__') >= 0;
+  const c = codeActuel_();
+  return typeof c !== 'string' || c.length < 16 || c.indexOf('__') >= 0;
+}
+
+/* Le code d'accès peut être changé depuis l'appli par un administrateur : le nouveau code est gardé dans les propriétés du script et remplace celui d'ici. */
+function codeActuel_() {
+  return PropertiesService.getScriptProperties().getProperty('code') || CODE;
 }
 
 function doPost(e) {
@@ -306,16 +327,20 @@ function doPost(e) {
     if (body.length > MAX_BODY) return out_({ ok: false, error: 'requete trop grande' });
     req = JSON.parse(body);
   } catch (err) { return out_({ ok: false, error: 'requete' }); }
-  if (!req || typeof req.code !== 'string' || req.code !== CODE) {
+  if (!req || typeof req.code !== 'string' || req.code !== codeActuel_()) {
     // Pas d'attente artificielle : le code est assez long pour résister à l'essai systématique, et une attente ferait perdre du temps de calcul à qui spamme l'adresse.
     return out_({ ok: false, error: 'code', service: 'Barniotte' });
   }
   try {
     if (req.action === 'ping') return out_({ ok: true, service: 'Barniotte', version: SCRIPT_VERSION });
-    if (req.action === 'sync') return out_(sync_(req.since));
-    if (req.action === 'apply') return out_(apply_(req.ops || []));
+    if (req.action === 'sync') return out_(sync_(req.since, req.token));
+    if (req.action === 'apply') return out_(apply_(req.ops || [], req.token));
     if (req.action === 'pin_set') return out_(pinSet_(req.name, req.pin));
     if (req.action === 'pin_check') return out_(pinCheck_(req.name, req.pin));
+    if (req.action === 'logout') return out_(deconnecter_(req.token));
+    if (req.action === 'admin_set') return out_(adminSet_(req.token, req.name, req.admin === true));
+    if (req.action === 'pin_reset') return out_(pinReset_(req.token, req.name));
+    if (req.action === 'code_change') return out_(codeChange_(req.token, req.newcode));
     return out_({ ok: false, error: 'action' });
   } catch (err) {
     return out_({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -344,10 +369,22 @@ function getRev_() {
 
 /* ---------- Lecture ---------- */
 
-function sync_(since) {
+/* Mise à niveau d'un Sheet créé par une version plus ancienne du script (nouvelle colonne des matchs). Une seule fois. */
+function migrer_() {
+  const p = PropertiesService.getScriptProperties();
+  if (p.getProperty('schema') === '5') return;
+  const sh = SpreadsheetApp.getActive().getSheetByName('Matchs');
+  if (sh) prepare_(sh, TABS.Matchs);
+  p.setProperty('schema', '5');
+}
+
+function sync_(since, token) {
+  migrer_();
   const rev = getRev_();
-  if (since != null && Number(since) === rev) return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, unchanged: true });
-  return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, state: readState_() });
+  const rep = { ok: true, rev: rev, version: SCRIPT_VERSION, now: Date.now() };
+  if (PIN_ACTIF) rep.me = moi_(token);
+  if (since != null && Number(since) === rev) rep.unchanged = true; else rep.state = readState_();
+  return pinInfo_(rep);
 }
 
 function tz_() { return SpreadsheetApp.getActive().getSpreadsheetTimeZone(); }
@@ -390,7 +427,7 @@ function readState_() {
     return {
       id: text_(r[0]), season: Number(text_(r[1])), ts: text_(r[2]), a: text_(r[3]), b: text_(r[4]),
       sa: num_(r[5]), sb: num_(r[6]), status: text_(r[7]),
-      mods: text_(r[8]).split(';').map(function (s) { return s.trim(); }).filter(Boolean), by: text_(r[9]), mod: text_(r[10])
+      mods: text_(r[8]).split(';').map(function (s) { return s.trim(); }).filter(Boolean), by: text_(r[9]), mod: text_(r[10]), fin: num_(r[11])
     };
   });
   const log = readTab_('Journal').filter(function (r) { return text_(r[0]) || text_(r[3]); }).map(function (r) {
@@ -449,20 +486,25 @@ function checkOp_(op) {
   return 'opération inconnue';
 }
 
-function apply_(ops) {
+function apply_(ops, token) {
   if (!Array.isArray(ops) || ops.length > 200) throw new Error('trop d’opérations');
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    migrer_();
     for (let i = 0; i < ops.length; i++) {
       const e = checkOp_(ops[i]);
       if (e) throw new Error('Opération ' + (i + 1) + ' : ' + e);
     }
+    const ctx = contexte_(token);
+    autoriser_(ops, ctx);
     verifierOps_(ops);
     const now = Utilities.formatDate(new Date(), tz_(), ISO);
     ops.forEach(function (op) { applyOp_(op, now); });
     const rev = bumpRev_();
-    return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, state: readState_() });
+    const rep = { ok: true, rev: rev, version: SCRIPT_VERSION, now: Date.now(), state: readState_() };
+    if (PIN_ACTIF) rep.me = moi_(token);
+    return pinInfo_(rep);
   } finally {
     lock.releaseLock();
   }
@@ -472,8 +514,10 @@ function apply_(ops) {
 function norm_(s) {
   return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
+function oui_(v) { return ['oui', 'true', '1'].indexOf(text_(v).toLowerCase()) >= 0; }
+
 function verifierOps_(ops) {
-  let noms = null, matchs = null;
+  let noms = null, matchs = null, actifs = null;
   ops.forEach(function (op, i) {
     if (op.t === 'player') {
       if (noms === null) noms = readTab_('Joueurs').map(function (r) { return text_(r[0]); }).filter(Boolean);
@@ -483,6 +527,19 @@ function verifierOps_(ops) {
     } else if (op.t === 'seasonDel') {
       if (matchs === null) matchs = readTab_('Matchs').map(function (r) { return text_(r[1]); });
       if (matchs.indexOf(String(op.id)) >= 0) throw new Error('Opération ' + (i + 1) + ' : cette saison contient des matchs');
+    } else if (op.t === 'playerDel') {
+      const aDesMatchs = readTab_('Matchs').some(function (r) { return text_(r[3]) === op.name || text_(r[4]) === op.name; });
+      if (aDesMatchs) throw new Error('Opération ' + (i + 1) + ' : ce joueur a des matchs, il faut le désactiver plutôt que le supprimer');
+    }
+    if (PIN_ACTIF && ((op.t === 'player' && op.row.active === false) || op.t === 'playerDel')) {
+      const cible = op.t === 'player' ? op.row.name : op.name;
+      const liste = admins_();
+      if (liste.length && liste.indexOf(cible) >= 0) {
+        if (actifs === null) actifs = readTab_('Joueurs').filter(function (r) { return oui_(r[1]); }).map(function (r) { return text_(r[0]); });
+        const reste = liste.filter(function (a) { return a !== cible && actifs.indexOf(a) >= 0; });
+        if (!reste.length) throw new Error('dernier_admin');
+        actifs = actifs.filter(function (a) { return a !== cible; });
+      }
     }
   });
 }
@@ -525,8 +582,11 @@ function applyOp_(op, now) {
   if (op.t === 'match') {
     const sh = sheet_('Matchs');
     const at = find_(sh, 1, r.id);
+    const avant = at ? sh.getRange(at, 1, 1, TABS.Matchs.cols.length).getValues()[0] : null;
+    // Heure (en millisecondes) à laquelle le match est devenu terminé : elle ne bouge plus ensuite, et sert au délai de correction par l'auteur.
+    const fin = r.status === 'termine' && !(avant && text_(avant[7]) === 'termine') ? String(Date.now()) : (avant ? text_(avant[11]) : '');
     const row = [String(r.id), String(r.season), r.ts, r.a, r.b, r.sa == null ? '' : r.sa, r.sb == null ? '' : r.sb,
-      r.status, (r.mods || []).join('; '), r.by || '', at ? now : ''];
+      r.status, (r.mods || []).join('; '), r.by || '', at ? now : '', fin];
     if (at) put_(sh, 'Matchs', row, at); else insertTop_(sh, 'Matchs', row);
   } else if (op.t === 'season') {
     const sh = sheet_('Saisons');
@@ -538,6 +598,7 @@ function applyOp_(op, now) {
     const at = find_(sh, 1, r.name);
     const row = [r.name, r.active ? 'oui' : 'non', Number(r.c) || 0];
     if (at) put_(sh, 'Joueurs', row, at); else append_(sh, 'Joueurs', row);
+    if (!r.active) sessionsRevoquer_(r.name);
   } else if (op.t === 'seasonDel') {
     const sh = sheet_('Saisons');
     const at = find_(sh, 1, op.id);
@@ -547,20 +608,26 @@ function applyOp_(op, now) {
     const at = find_(sh, 1, op.name);
     if (at) sh.deleteRow(at);
     pinOublier_(op.name);
+    sessionsRevoquer_(op.name);
   } else if (op.t === 'log') {
     insertTop_(sheet_('Journal'), 'Journal', [r.ts, r.by || '', r.match == null ? '' : String(r.match), r.what]);
   }
 }
 
-/* ---------- Codes PIN ----------
-   Le code n'est jamais stocké : seulement une empreinte (SHA-256 avec un sel propre à ce script), dans les propriétés du script,
-   que seul le propriétaire du Sheet peut voir. Cinq essais ratés bloquent le nom pendant 15 minutes, quel que soit le téléphone. */
+/* ---------- Codes PIN, sessions et administrateurs ----------
+   Le code PIN n'est jamais stocké : seulement une empreinte (SHA-256 avec un sel propre à ce script), dans les propriétés du script,
+   que seul le propriétaire du Sheet peut voir. Cinq essais ratés bloquent le nom pendant 15 minutes, quel que soit le téléphone.
+   Un PIN correct donne au téléphone un jeton de session (lui aussi gardé sous forme d'empreinte). Avec PIN_ACTIF, toute écriture exige un jeton valable :
+   le script sait donc qui écrit, et un joueur désactivé perd son accès. */
 
 function pinLire_(cle) {
   try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(cle) || '{}') || {}; } catch (e) { return {}; }
 }
 function pinEcrire_(cle, obj) { PropertiesService.getScriptProperties().setProperty(cle, JSON.stringify(obj)); }
 
+function hex_(oct) {
+  return oct.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+}
 function pinSel_() {
   const p = PropertiesService.getScriptProperties();
   let s = p.getProperty('pinsel');
@@ -568,8 +635,7 @@ function pinSel_() {
   return s;
 }
 function pinEmpreinte_(nom, pin) {
-  const oct = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, pinSel_() + '|' + nom + '|' + pin, Utilities.Charset.UTF_8);
-  return oct.map(function (b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, pinSel_() + '|' + nom + '|' + pin, Utilities.Charset.UTF_8));
 }
 function pinFormat_(pin) {
   if (typeof pin !== 'string' || !/^\d{6}$/.test(pin)) return false;
@@ -577,10 +643,133 @@ function pinFormat_(pin) {
   return true;
 }
 
-/* Ajoute à une réponse l'état des codes : fonction activée ou non, et noms qui ont déjà un code (jamais le code). */
+/* Administrateurs : ceux écrits dans le script (ADMINS) et ceux nommés depuis l'appli. */
+function adminsDyn_() {
+  try {
+    const a = JSON.parse(PropertiesService.getScriptProperties().getProperty('admins') || '[]');
+    return Array.isArray(a) ? a.filter(function (s) { return typeof s === 'string'; }) : [];
+  } catch (e) { return []; }
+}
+function admins_() {
+  const out = [];
+  ADMINS.concat(adminsDyn_()).forEach(function (n) { if (out.indexOf(n) < 0) out.push(n); });
+  return out;
+}
+function estAdmin_(nom) {
+  const a = admins_();
+  return a.length === 0 || a.indexOf(nom) >= 0;
+}
+
+/* ----- Sessions ----- */
+function sessionCle_(token) {
+  return 's:' + hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'session|' + token, Utilities.Charset.UTF_8)).slice(0, 40);
+}
+function sessionCreer_(nom) {
+  const p = PropertiesService.getScriptProperties();
+  const maintenant = Date.now(), vivantes = [];
+  p.getKeys().forEach(function (k) {
+    if (k.indexOf('s:') !== 0) return;
+    let s = null;
+    try { s = JSON.parse(p.getProperty(k)); } catch (e) { s = null; }
+    if (!s || maintenant - s.l > SESSION_JOURS * 86400000) p.deleteProperty(k);
+    else if (s.n === nom) vivantes.push({ k: k, l: s.l });
+  });
+  vivantes.sort(function (a, b) { return a.l - b.l; });
+  while (vivantes.length >= 8) p.deleteProperty(vivantes.shift().k);
+  const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  p.setProperty(sessionCle_(token), JSON.stringify({ n: nom, l: maintenant, p: maintenant }));
+  return token;
+}
+function session_(token) {
+  if (typeof token !== 'string' || token.length < 40 || token.length > 100) return null;
+  const p = PropertiesService.getScriptProperties(), cle = sessionCle_(token);
+  let s = null;
+  try { s = JSON.parse(p.getProperty(cle) || 'null'); } catch (e) { s = null; }
+  if (!s) return null;
+  const maintenant = Date.now();
+  if (maintenant - s.l > SESSION_JOURS * 86400000) { p.deleteProperty(cle); return null; }
+  if (maintenant - s.l > 6 * 3600000) { s.l = maintenant; p.setProperty(cle, JSON.stringify(s)); }
+  return { nom: s.n, pinMs: s.p };
+}
+function sessionsRevoquer_(nom) {
+  const p = PropertiesService.getScriptProperties();
+  p.getKeys().forEach(function (k) {
+    if (k.indexOf('s:') !== 0) return;
+    try { if (JSON.parse(p.getProperty(k)).n === nom) p.deleteProperty(k); } catch (e) { p.deleteProperty(k); }
+  });
+}
+function deconnecter_(token) {
+  if (typeof token === 'string' && token.length >= 40 && token.length <= 100) PropertiesService.getScriptProperties().deleteProperty(sessionCle_(token));
+  return { ok: true };
+}
+
+/* Qui écrit : null si les PIN sont arrêtés (tout le monde de confiance, comme avant). Sinon le joueur lié au jeton, ou une erreur. */
+function contexte_(token) {
+  if (!PIN_ACTIF) return null;
+  const s = session_(token);
+  if (!s) throw new Error('session');
+  const joueur = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === s.nom; })[0];
+  if (!joueur || !oui_(joueur[1])) throw new Error('inactif');
+  return { nom: s.nom, admin: estAdmin_(s.nom), frais: Date.now() - s.pinMs <= ADMIN_FENETRE_H * 3600000 };
+}
+function moi_(token) {
+  try {
+    const c = contexte_(token);
+    return c ? { name: c.nom, admin: c.admin, fresh: c.frais } : null;
+  } catch (e) { return null; }
+}
+function exigerAdmin_(c) {
+  if (!c) throw new Error('pin_inactif');
+  if (!c.admin) throw new Error('admin');
+  if (!c.frais) throw new Error('pin_requis');
+}
+
+/* Droits de chaque opération. Le script écrit lui-même le nom de l'auteur : celui du jeton, jamais celui annoncé par le téléphone. */
+function autoriser_(ops, c) {
+  if (!c) return;
+  const matchs = {}, joueurs = {};
+  readTab_('Matchs').forEach(function (r) { const id = text_(r[0]); if (id) matchs[id] = r; });
+  readTab_('Joueurs').forEach(function (r) { const n = text_(r[0]); if (n) joueurs[n] = r; });
+  let besoinAdmin = false, tropTard = false;
+  ops.forEach(function (op) {
+    const r = op.row;
+    if (op.t === 'log') { r.by = c.nom; return; }
+    if (op.t === 'match') {
+      const ex = matchs[String(r.id)];
+      if (!ex) { r.by = c.nom; return; }
+      const statut = text_(ex[7]), auteur = text_(ex[9]);
+      r.by = auteur;
+      if (statut === 'en_cours' && auteur === c.nom) return;
+      if (statut === 'termine' && auteur === c.nom) {
+        const fin = num_(ex[11]);
+        if (fin && Date.now() - fin <= DELAI_MATCH_MIN * 60000) return;
+        tropTard = true;
+      }
+      besoinAdmin = true;
+      return;
+    }
+    if (op.t === 'player') {
+      const ex = joueurs[r.name];
+      if (ex && r.name === c.nom && oui_(ex[1]) === !!r.active) return;   // seule la couleur de son propre nom
+    }
+    besoinAdmin = true;
+  });
+  if (besoinAdmin) {
+    if (!c.admin) throw new Error(tropTard ? 'delai' : 'admin');
+    if (!c.frais) throw new Error('pin_requis');
+  }
+}
+
+function jetonReponse_(nom) {
+  const token = sessionCreer_(nom);
+  return { token: token, me: { name: nom, admin: estAdmin_(nom), fresh: true } };
+}
+
+/* Informations publiques ajoutées aux réponses : fonction active, noms qui ont déjà un code, administrateurs. Jamais un code. */
 function pinInfo_(rep) {
   rep.pin = !!PIN_ACTIF;
   rep.pinned = PIN_ACTIF ? Object.keys(pinLire_('pins')) : [];
+  rep.admins = PIN_ACTIF ? admins_() : [];
   return rep;
 }
 
@@ -591,14 +780,19 @@ function pinSet_(nom, pin) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const existe = readTab_('Joueurs').some(function (r) { return text_(r[0]) === nom; });
-    if (!existe) return { ok: false, error: 'joueur' };
+    migrer_();
+    const ligne = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === nom; })[0];
+    if (!ligne) {
+      // Premier démarrage : le créateur, écrit dans ADMINS, est ajouté comme joueur quand il choisit son nom.
+      if (admins_().indexOf(nom) < 0 || !txt_(nom, 40)) return { ok: false, error: 'joueur' };
+      append_(sheet_('Joueurs'), 'Joueurs', [nom, 'oui', readTab_('Joueurs').length]);
+    } else if (!oui_(ligne[1])) return { ok: false, error: 'inactif' };
     const pins = pinLire_('pins');
     if (pins[nom]) return pinInfo_({ ok: false, error: 'pin_deja' });
     pins[nom] = pinEmpreinte_(nom, pin);
     pinEcrire_('pins', pins);
     bumpRev_();
-    return pinInfo_({ ok: true });
+    return pinInfo_(Object.assign({ ok: true, now: Date.now() }, jetonReponse_(nom)));
   } finally { lock.releaseLock(); }
 }
 
@@ -610,13 +804,15 @@ function pinCheck_(nom, pin) {
   try {
     const pins = pinLire_('pins');
     if (!pins[nom]) return pinInfo_({ ok: false, error: 'pin_aucun' });
+    const ligne = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === nom; })[0];
+    if (!ligne || !oui_(ligne[1])) return { ok: false, error: 'inactif' };
     const essais = pinLire_('pinessais');
     const e = essais[nom] || { n: 0, jusqua: 0 };
     const maintenant = Date.now();
     if (e.jusqua > maintenant) return { ok: false, error: 'verrou', wait: Math.ceil((e.jusqua - maintenant) / 60000) };
     if (pins[nom] === pinEmpreinte_(nom, pin)) {
       if (essais[nom]) { delete essais[nom]; pinEcrire_('pinessais', essais); }
-      return { ok: true };
+      return pinInfo_(Object.assign({ ok: true, now: Date.now() }, jetonReponse_(nom)));
     }
     e.n = (e.n || 0) + 1;
     if (e.n >= PIN_MAX_ESSAIS) {
@@ -635,19 +831,70 @@ function pinOublier_(nom) {
   if (pins[nom] || essais[nom]) { delete pins[nom]; delete essais[nom]; pinEcrire_('pins', pins); pinEcrire_('pinessais', essais); }
 }
 
+/* ----- Actions réservées aux administrateurs (PIN saisi depuis moins de 4 heures) ----- */
+function avecVerrou_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+
+function adminSet_(token, nom, valeur) {
+  return avecVerrou_(function () {
+    exigerAdmin_(contexte_(token));
+    if (typeof nom !== 'string' || !nom || nom.length > 40) throw new Error('joueur');
+    const ligne = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === nom; })[0];
+    if (!ligne || !oui_(ligne[1])) throw new Error('joueur');
+    let dyn = adminsDyn_();
+    if (valeur) { if (dyn.indexOf(nom) < 0 && ADMINS.indexOf(nom) < 0) dyn.push(nom); }
+    else {
+      if (ADMINS.indexOf(nom) >= 0) throw new Error('admin_fixe');
+      dyn = dyn.filter(function (n) { return n !== nom; });
+      const actifs = readTab_('Joueurs').filter(function (r) { return oui_(r[1]); }).map(function (r) { return text_(r[0]); });
+      const reste = ADMINS.concat(dyn).filter(function (n) { return actifs.indexOf(n) >= 0; });
+      if (!reste.length) throw new Error('dernier_admin');
+    }
+    PropertiesService.getScriptProperties().setProperty('admins', JSON.stringify(dyn));
+    bumpRev_();
+    return pinInfo_({ ok: true });
+  });
+}
+
+function pinReset_(token, nom) {
+  return avecVerrou_(function () {
+    exigerAdmin_(contexte_(token));
+    if (typeof nom !== 'string' || !nom || nom.length > 40) throw new Error('joueur');
+    pinOublier_(nom);
+    sessionsRevoquer_(nom);
+    bumpRev_();
+    return pinInfo_({ ok: true });
+  });
+}
+
+function codeChange_(token, nouveau) {
+  return avecVerrou_(function () {
+    exigerAdmin_(contexte_(token));
+    if (typeof nouveau !== 'string' || !/^[A-Za-z0-9_-]{16,60}$/.test(nouveau)) throw new Error('code_invalide');
+    PropertiesService.getScriptProperties().setProperty('code', nouveau);
+    return { ok: true };
+  });
+}
+
 /* À lancer à la main depuis l'éditeur, après avoir écrit le nom dans JOUEUR_PIN_A_REINITIALISER (en haut du script). */
 function reinitialiserPin() {
   if (!JOUEUR_PIN_A_REINITIALISER) throw new Error('Écris d’abord le nom du joueur dans JOUEUR_PIN_A_REINITIALISER, en haut du script.');
   pinOublier_(JOUEUR_PIN_A_REINITIALISER);
+  sessionsRevoquer_(JOUEUR_PIN_A_REINITIALISER);
   bumpRev_();
   Logger.log('Code réinitialisé pour ' + JOUEUR_PIN_A_REINITIALISER + '. Il en créera un nouveau en choisissant son nom.');
 }
 
-/* Efface tous les codes (à utiliser seulement si nécessaire). */
+/* Efface tous les codes et toutes les sessions (à utiliser seulement si nécessaire). */
 function reinitialiserTousLesPin() {
   pinEcrire_('pins', {}); pinEcrire_('pinessais', {});
+  const p = PropertiesService.getScriptProperties();
+  p.getKeys().forEach(function (k) { if (k.indexOf('s:') === 0) p.deleteProperty(k); });
   bumpRev_();
-  Logger.log('Tous les codes sont effacés.');
+  Logger.log('Tous les codes et toutes les sessions sont effacés.');
 }
 </script>
 <script type="text/plain" id="tpl-backup">__BACKUP__</script>
@@ -665,7 +912,25 @@ function reinitialiserTousLesPin() {
     for (var i = 0; i < 16; i++) out.push(ALPHA.charAt(buf[i] % ALPHA.length));
     return 'barn-' + [0, 4, 8, 12].map(function (k) { return out.slice(k, k + 4).join(''); }).join('-');
   }
-  function script() { var s = tpl.replace("'__CODE__'", "'" + code + "'"); if ($('opt-pin').checked) s = s.replace('const PIN_ACTIF = false;', 'const PIN_ACTIF = true;'); return s; }
+  function adminName() {
+    var v = $('admin-name').value.replace(/\s+/g, ' ').trim();
+    return $('opt-pin').checked && v && v.length <= 40 && !/["'\\<>`$\u0000-\u001f]/.test(v) && !/^[=+\-@]/.test(v) ? v : '';
+  }
+  function script() {
+    var s = tpl.replace("'__CODE__'", "'" + code + "'");
+    if ($('opt-pin').checked) {
+      s = s.replace('const PIN_ACTIF = false;', 'const PIN_ACTIF = true;');
+      var n = adminName();
+      if (n) s = s.replace('const ADMINS = [];', 'const ADMINS = [' + JSON.stringify(n) + '];');
+    }
+    return s;
+  }
+  function adminUi() {
+    $('admin-box').hidden = !$('opt-pin').checked;
+    var raw = $('admin-name').value.trim();
+    $('admin-name').setAttribute('aria-invalid', raw && !adminName() ? 'true' : 'false');
+    if (code) $('script-view').value = script();
+  }
 
   function copy(text, msgEl, okText) {
     function fallback() {
@@ -700,7 +965,8 @@ function reinitialiserTousLesPin() {
     m.className = 'ok'; m.textContent = 'Code pris en compte.';
     setCode(v);
   });
-  $('opt-pin').addEventListener('change', function () { if (code) $('script-view').value = script(); });
+  $('opt-pin').addEventListener('change', adminUi);
+  $('admin-name').addEventListener('input', adminUi);
   $('copy-script').addEventListener('click', function () { copy(script(), $('copy-msg'), 'Script copié. Colle-le dans l’éditeur Apps Script (Ctrl+V).'); });
   $('copy-backup').addEventListener('click', function () { copy(backup, $('backup-msg'), 'Script de sauvegarde copié.'); });
 

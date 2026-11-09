@@ -395,8 +395,8 @@ const Core = (() => {
   const CONFIG_API = (window.BARNIOTTE && window.BARNIOTTE.api) || '';
   const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
   const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
-  const LATEST_SCRIPT = 4;             // dernière version du script serveur connue de cette appli
-  const APP_STAGE = 'bêta', APP_VERSION = '0.5';
+  const LATEST_SCRIPT = 5;             // dernière version du script serveur connue de cette appli
+  const APP_STAGE = 'bêta', APP_VERSION = '0.6';
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
@@ -648,7 +648,83 @@ const Core = (() => {
   }
 
   /* ---------- Flux : modifier un match ---------- */
+  /* ---------- Carte administrateur ---------- */
+  async function adminCall(action, extra, after) {
+    try {
+      const r = await call(action, extra);
+      if (r.ok) { if (after) after(r); render(); syncNow(true); return r; }
+      if (r.error === 'pin_requis') { if (me) askPin(me, 'Action d’administrateur : confirme ton code PIN, puis recommence. Il reste valable 4 heures.'); return null; }
+      if (r.error === 'session' || r.error === 'inactif') { setToken(''); pinok = ''; lsDel(PINOK_KEY); toast('Reconnecte-toi avec ton code PIN.'); syncNow(true); return null; }
+      toast('Refusé : ' + errFr(r.error)); return null;
+    } catch (e) { toast(NET_MSG); return null; }
+  }
+  function newAccessCode() {
+    const al = 'abcdefghjkmnpqrstuvwxyz23456789', a = new Uint8Array(20);
+    (window.crypto || window.msCrypto).getRandomValues(a);
+    const c = Array.from(a, x => al[x % al.length]);
+    return 'barn-' + [0, 4, 8, 12].map(i => c.slice(i, i + 4).join('')).join('-');
+  }
+  function changeCodeFlow() {
+    const sh = openSheet();
+    const nc = newAccessCode();
+    sh.set(h('h2', {}, 'Changer le code d’accès'),
+      h('p', {}, 'Le code d’accès est dans le lien d’invitation. Si quelqu’un qui ne doit plus accéder au groupe l’a reçu, change-le : l’ancien lien cesse de fonctionner immédiatement.'),
+      h('p', { class: 'warn' }, 'Tous les autres joueurs devront rouvrir le nouveau lien (à leur envoyer) ; leurs matchs non envoyés seront gardés.'),
+      h('div', { class: 'btns' },
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+        h('button', { type: 'button', class: 'btn danger', onclick: async () => {
+          const r = await adminCall('code_change', { newcode: nc }, () => { code = nc; lsSet(CODE_KEY, code); });
+          if (!r) { sh.close(); return; }
+          const link = inviteLink();
+          const box = h('input', { type: 'text', readonly: true, value: link, 'aria-label': 'Nouveau lien d’invitation' });
+          sh.set(h('h2', {}, 'Code changé'), h('p', {}, 'Envoie ce nouveau lien aux joueurs de confiance. L’ancien ne fonctionne plus.'), box,
+            h('div', { class: 'btns' },
+              h('button', { type: 'button', class: 'btn', onclick: () => { try { navigator.clipboard.writeText(link).then(() => toast('Lien copié.'), () => { box.focus(); box.select(); }); } catch (e) { box.focus(); box.select(); } } }, 'Copier le lien'),
+              h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Fermer')));
+        } }, 'Changer le code')));
+  }
+  function adminCard() {
+    const card = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Administration'));
+    if (!net.admins.length) card.append(h('p', { class: 'warn' }, 'Aucun administrateur n’est défini : tous les joueurs peuvent tout modifier. Pour changer cela, écris le nom du créateur dans le script (ADMINS), puis redéploie-le.'));
+    else card.append(h('p', { class: 'hint' }, 'Les administrateurs peuvent ouvrir et clôturer les saisons, gérer les joueurs, corriger les matchs terminés et changer le code d’accès. Ceux du script ne peuvent être retirés que depuis le script.'));
+    const list = h('div', { class: 'plist' });
+    state.players.filter(p => p.active).forEach(p => {
+      const isA = net.admins.includes(p.name);
+      list.append(h('div', { class: 'row' }, h('span', {}, p.name),
+        h('div', { class: 'rowbtns' },
+          net.admins.length ? h('button', { type: 'button', class: 'chip' + (isA ? ' on' : ''), 'aria-pressed': isA ? 'true' : 'false', onclick: () => adminCall('admin_set', { name: p.name, admin: !isA }).then(r => { if (r) toast(p.name + (isA ? ' n’est plus admin.' : ' est admin.')); }) }, isA ? 'Admin' : 'Joueur') : null,
+          net.pinned.includes(p.name) ? h('button', { type: 'button', class: 'chip del', 'aria-label': 'Réinitialiser le code de ' + p.name, onclick: () => {
+            const sh = openSheet();
+            sh.set(h('h2', {}, 'Réinitialiser le code de ' + p.name + ' ?'),
+              h('p', {}, p.name + ' sera déconnecté de tous ses téléphones et devra créer un nouveau code PIN en choisissant son nom.'),
+              h('div', { class: 'btns' },
+                h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
+                h('button', { type: 'button', class: 'btn danger', onclick: async () => { const r = await adminCall('pin_reset', { name: p.name }); sh.close(); if (r) toast('Code de ' + p.name + ' réinitialisé.'); } }, 'Réinitialiser')));
+          } }, 'Code') : null)));
+    });
+    card.append(list, h('button', { type: 'button', class: 'btn ghost', onclick: changeCodeFlow }, 'Changer le code d’accès du groupe'));
+    return card;
+  }
+
+  /* Qui peut toucher à un match : un administrateur, ou son auteur (pour un match en cours, ou dans les 10 minutes après la fin). */
+  function matchRight(m) {
+    if (isAdmin()) return { ok: true };
+    if (m.by !== me) return { ok: false, why: 'Seul l’auteur du match (pendant 10 minutes) ou un administrateur peut le modifier.' };
+    if (m.status === 'en_cours') return { ok: true };
+    if (m.fin == null || (m.fin > 0 && serverNow() - m.fin <= DELAI_MATCH_MS)) return { ok: true };
+    return { ok: false, why: 'Le délai de 10 minutes pour corriger ton match est dépassé. Demande à un administrateur.' };
+  }
   function editMatch(m) {
+    const right = matchRight(m);
+    if (!right.ok) {
+      const sh = openSheet();
+      sh.set(h('h2', {}, m.a + ' vs ' + m.b),
+        h('p', { class: 'hint' }, 'Match du ' + fmtDay(m.ts.slice(0, 10)) + '. Saisi par ' + m.by + '.'),
+        m.status === 'termine' ? h('p', {}, m.a + ' ' + sc(m) + ' ' + m.b) : h('p', {}, 'Match en cours.'),
+        h('p', { class: 'hint' }, right.why),
+        h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Fermer')));
+      return;
+    }
     if (m.status === 'en_cours') { const sh = openSheet(); scoreStep(m, sh); return; }
     const sh = openSheet();
     let vals = [m.sa, m.sb], valid = true, sel = m.mods.slice();
@@ -710,7 +786,7 @@ const Core = (() => {
      Si l'organisateur a activé les codes (PIN_ACTIF dans le script), chaque joueur crée un code à 6 chiffres la première fois qu'il choisit son nom.
      Le serveur vérifie le code et bloque le nom après 5 essais ratés. Le téléphone retient qui s'est identifié : le code n'est redemandé qu'en changeant de téléphone ou de joueur. */
   const pinOn = () => !!(API && net.pin);
-  const needsPin = () => pinOn() && !!me && state.players.some(p => p.name === me && p.active) && pinok !== me;
+  const needsPin = () => pinOn() && !!me && state.players.some(p => p.name === me && p.active) && (pinok !== me || (net.version >= 5 && !token));
   function identityGate() {
     if (!me || !state.players.some(p => p.name === me && p.active)) { askWho(); return false; }
     if (needsPin()) { enterIdentity(me); return false; }
@@ -724,6 +800,7 @@ const Core = (() => {
     pinok = name; lsSet(PINOK_KEY, name); setMe(name);
     if (openSh) openSh.close();
     render(); checkPending();
+    if (pinOn()) setTimeout(() => syncNow(true), 50);
   }
   const pinField = (id, label) => {
     const el = h('input', { type: 'password', inputmode: 'numeric', pattern: '[0-9]*', maxlength: '6', autocomplete: 'off', id, class: 'pin-in', 'aria-label': label, placeholder: '••••••' });
@@ -738,7 +815,7 @@ const Core = (() => {
     const sh = openSheet(true);
     const act = state.players.filter(p => p.active).map(p => p.name);
     const on = pinOn();
-    const free = on ? act.filter(n => !net.pinned.includes(n)) : act;
+    const free = on ? (act.length ? act : (net.admins || [])).filter(n => !net.pinned.includes(n)) : act;
     const taken = on ? act.filter(n => net.pinned.includes(n)) : [];
     const retrouver = () => sh.set(
       h('h2', {}, 'Retrouver mon nom'),
@@ -754,7 +831,7 @@ const Core = (() => {
       taken.length ? h('button', { type: 'button', class: 'btn ghost', onclick: retrouver }, 'Mon nom est déjà pris : j’ai un code PIN') : null);
   }
 
-  function askPin(name) {
+  function askPin(name, note) {
     const sh = openSheet(true);
     const inp = pinField('pin-in', 'Code PIN de ' + name), msg = h('p', { class: 'hint', 'aria-live': 'polite' });
     const go = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: submit }, 'Valider');
@@ -770,13 +847,14 @@ const Core = (() => {
         msg.className = 'hint err';
         if (r.error === 'verrou') msg.textContent = 'Trop d’essais : ce nom est bloqué encore ' + plural(r.wait || 15, 'minute', 'minutes') + '.';
         else if (r.error === 'pin') msg.textContent = 'Code incorrect. Il te reste ' + plural(r.left, 'essai', 'essais') + ' avant un blocage de 15 minutes.';
+        else if (r.error === 'inactif') msg.textContent = 'Ton accès a été coupé par un administrateur du groupe.';
         else if (r.error === 'code') msg.textContent = 'Le code d’accès du groupe n’est plus valable. Recharge l’appli.';
         else msg.textContent = 'Erreur : ' + (r.error || 'inconnue');
       } catch (e) { msg.className = 'hint err'; msg.textContent = NET_MSG; }
       inp.value = ''; go.disabled = true; inp.focus();
     }
     sh.set(h('h2', {}, 'Bonjour ' + name),
-      h('p', { class: 'hint' }, 'Saisis ton code PIN à 6 chiffres. Tu ne le saisis qu’une fois sur ce téléphone.'),
+      h('p', { class: 'hint' }, note || 'Saisis ton code PIN à 6 chiffres. Tu ne le saisis qu’une fois sur ce téléphone.'),
       inp, msg,
       h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: askWho }, 'Ce n’est pas moi'), go),
       h('p', { class: 'hint' }, 'Code oublié ? L’organisateur peut le réinitialiser.'));
@@ -1179,7 +1257,13 @@ const Core = (() => {
       chips(state.players.filter(p => p.active).map(p => p.name), { selected: me ? [me] : [], onChange: v => { if (v[0] === me && !needsPin()) return; if (pinOn()) enterIdentity(v[0]); else { setMe(v[0]); render(); } } }),
       pinOn() ? h('p', { class: 'hint' }, 'Pour prendre l’identité d’un autre joueur, il faut son code PIN.') : null));
 
-    if (s && isInter(s)) {
+    const adm = isAdmin();
+    if (!adm) {
+      out.append(h('div', { class: 'card stack' },
+        h('h2', { class: 'sec-h' }, s ? s.name + ' · depuis le ' + fmtShort(s.start) : 'Aucune saison en cours'),
+        s ? h('p', { class: 'hint' }, isInter(s) ? 'Intersaison : les matchs ne comptent pour aucun classement.' : 'Quota : ' + s.quota + ' matchs par duo. Joueurs : ' + s.players.join(', ') + '.') : null,
+        h('p', { class: 'hint' }, 'Ouvrir ou clôturer une saison, gérer les joueurs et le lien d’invitation est réservé aux administrateurs' + (net.admins.length ? ' (' + net.admins.join(', ') + ')' : '') + '.')));
+    } else if (s && isInter(s)) {
       out.append(h('div', { class: 'card stack' },
         h('h2', { class: 'sec-h' }, s.name + ' · depuis le ' + fmtShort(s.start)),
         h('p', { class: 'hint' }, 'Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement. Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison.'),
@@ -1201,6 +1285,7 @@ const Core = (() => {
         h('button', { type: 'button', class: 'btn', onclick: () => closeSeason(s) }, 'Clôturer la saison'),
         delSeasonBtn(s)));
     } else out.append(newSeasonForm());
+    if (adm && tokenMode()) out.append(adminCard());
 
     const pl = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Joueurs'),
       h('p', { class: 'hint' }, s && isInter(s) ? 'Un joueur ajouté pendant l’intersaison peut jouer tout de suite. Dans une saison classée, il joue à partir de la suivante.' : 'Un joueur ajouté joue à partir de la saison suivante, jamais en cours de saison.'));
@@ -1209,9 +1294,11 @@ const Core = (() => {
       const inSeason = s && !isInter(s) && s.players.includes(p.name);
       list.append(h('div', { class: 'row' },
         h('span', {}, h('i', { class: 'dot', style: 'display:inline-block;background:' + colorOf(p.name) + ';margin-right:8px' }), p.name, inSeason ? h('span', { class: 'hint' }, ' · saison en cours') : null),
-        h('div', { class: 'rowbtns' },
-          h('button', { type: 'button', class: 'chip' + (p.active ? ' on' : ''), 'aria-pressed': p.active ? 'true' : 'false', onclick: () => { p.active = !p.active; commit(); } }, p.active ? 'Actif' : 'Inactif'),
-          h('button', { type: 'button', class: 'chip del', 'aria-label': 'Supprimer ' + p.name, onclick: () => deletePlayer(p) }, 'Supprimer'))));
+        adm
+          ? h('div', { class: 'rowbtns' },
+            h('button', { type: 'button', class: 'chip' + (p.active ? ' on' : ''), 'aria-pressed': p.active ? 'true' : 'false', onclick: () => { p.active = !p.active; commit(); } }, p.active ? 'Actif' : 'Inactif'),
+            h('button', { type: 'button', class: 'chip del', 'aria-label': 'Supprimer ' + p.name, onclick: () => deletePlayer(p) }, 'Supprimer'))
+          : h('span', { class: 'hint' }, (net.admins.includes(p.name) ? 'Admin · ' : '') + (p.active ? 'Actif' : 'Inactif'))));
     });
     const input = h('input', { type: 'text', id: 'new-player', placeholder: 'Nom du nouveau joueur', 'aria-label': 'Nom du nouveau joueur', value: playerDraft });
     input.addEventListener('input', () => { playerDraft = input.value; });
@@ -1226,7 +1313,7 @@ const Core = (() => {
       state.players.push({ name: n, active: true, c: Math.max(-1, ...state.players.map(q => (q.c == null ? -1 : q.c))) + 1 }); logEntry('Joueur ajouté : ' + n, null); commit(); toast(n + ' ajouté à la liste.');
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
-    pl.append(list, h('div', { class: 'row' }, h('div', { class: 'grow' }, input), h('button', { type: 'button', class: 'btn', onclick: add }, 'Ajouter')));
+    pl.append(list, adm ? h('div', { class: 'row' }, h('div', { class: 'grow' }, input), h('button', { type: 'button', class: 'btn', onclick: add }, 'Ajouter')) : null);
     out.append(pl);
 
     if (API && code) {
@@ -1236,13 +1323,13 @@ const Core = (() => {
         h('p', { class: 'hint' }, 'Les matchs sont enregistrés dans le Sheet et partagés entre tous les téléphones connectés.'),
         h('div', { class: 'btns' },
           h('button', { type: 'button', class: 'btn', onclick: () => { syncNow(true); toast('Synchronisation lancée.'); } }, 'Synchroniser'),
-          h('button', { type: 'button', class: 'btn', onclick: () => {
+          !adm ? null : h('button', { type: 'button', class: 'btn', onclick: () => {
             const link = inviteLink();
             const fallback = () => { const i = h('input', { type: 'text', readonly: true, value: link, 'aria-label': 'Lien d’invitation' }); linkBox.replaceChildren(i); i.focus(); i.select(); };
             try { navigator.clipboard.writeText(link).then(() => toast('Lien d’invitation copié.'), fallback); } catch (e) { fallback(); }
           } }, 'Copier le lien d’invitation')),
         linkBox,
-        h('p', { class: 'hint' }, 'Le lien contient le code d’accès : ne l’envoie qu’aux joueurs.'),
+        adm ? h('p', { class: 'hint' }, 'Le lien contient le code d’accès : ne l’envoie qu’aux joueurs.') : null,
         net.version != null && net.version < LATEST_SCRIPT ? h('p', { class: 'hint' }, 'Le script de ce groupe est en version ' + net.version + ' (la dernière est ' + LATEST_SCRIPT + '). Tout fonctionne, mais l’organisateur peut le mettre à jour avec le guide.') : null,
         h('div', { class: 'btns' },
           h('button', { type: 'button', class: 'btn ghost', onclick: () => { code = ''; try { localStorage.removeItem(CODE_KEY); } catch (e) { /* ignoré */ } net.state = 'locked'; paintNet(); askCode(); } }, 'Changer de code'),
@@ -1300,7 +1387,17 @@ const Core = (() => {
   const net = { state: API ? (code ? 'idle' : 'locked') : (HOSTED ? 'locked' : 'local'), version: null, rev: null, busy: false, again: false, loaded: false, tick: 0, at: '', error: '', polling: false };
   const PINOK_KEY = 'barniotte-pinok' + NS, PININFO_KEY = 'barniotte-pininfo' + NS;
   let pinok = lsGet(PINOK_KEY) || '';
-  net.pin = false; net.pinned = [];
+  net.pin = false; net.pinned = []; net.admins = []; net.me = null; net.skew = 0;
+  /* Jeton de session : donné par le serveur après un PIN correct, renvoyé à chaque échange. Le PIN lui-même n'est jamais gardé sur le téléphone. */
+  const TOKEN_KEY = 'barniotte-token' + NS;
+  let token = lsGet(TOKEN_KEY) || '';
+  const setToken = t => { token = t || ''; if (token) lsSet(TOKEN_KEY, token); else lsDel(TOKEN_KEY); };
+  const tokenMode = () => !!(API && net.pin && net.version >= 5);
+  const isAdmin = () => !tokenMode() || !net.me || !!net.me.admin;
+  const serverNow = () => Date.now() + (net.skew || 0);
+  const DELAI_MATCH_MS = 10 * 60000;
+  const ERR_FR = { admin: 'réservé aux administrateurs', delai: 'le délai de 10 minutes est dépassé', session: 'session expirée', inactif: 'accès coupé', pin_requis: 'PIN à confirmer', dernier_admin: 'il doit rester au moins un administrateur actif', admin_fixe: 'cet administrateur est défini dans le script', joueur: 'joueur introuvable', code_invalide: 'code invalide (16 à 60 caractères : lettres, chiffres, - et _)' };
+  const errFr = e => ERR_FR[e] || e || 'erreur';
   try { const pi = JSON.parse(lsGet(PININFO_KEY) || 'null'); if (pi) { net.pin = !!pi.on; net.pinned = Array.isArray(pi.names) ? pi.names.filter(n => typeof n === 'string') : []; } } catch (e) { /* ignoré */ }
   const savePinInfo = () => lsSet(PININFO_KEY, JSON.stringify({ on: net.pin, names: net.pinned }));
   let snap = null;
@@ -1367,10 +1464,19 @@ const Core = (() => {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 25000);
     try {
-      const res = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ code, action }, extra || {})), signal: ctl.signal });
+      const res = await fetch(API, { method: 'POST', body: JSON.stringify(Object.assign({ code, action }, token ? { token } : {}, extra || {})), signal: ctl.signal });
       const j = await res.json();
       if (j && j.ok) { if (typeof j.version === 'number') net.version = j.version; else if (net.version == null) net.version = 0; }
       if (j && typeof j.pin === 'boolean') { net.pin = j.pin; net.pinned = Array.isArray(j.pinned) ? j.pinned : []; savePinInfo(); }
+      if (j && j.ok) {
+        if (typeof j.token === 'string' && j.token) setToken(j.token);
+        if (typeof j.now === 'number') net.skew = j.now - Date.now();
+        if (Array.isArray(j.admins)) net.admins = j.admins;
+        if ('me' in j) {
+          net.me = j.me && typeof j.me === 'object' ? j.me : null;
+          if (!net.me && token && net.pin) { setToken(''); pinok = ''; lsDel(PINOK_KEY); }   // jeton refusé : il faudra ressaisir le PIN
+        }
+      }
       return j;
     } finally { clearTimeout(timer); }
   }
@@ -1385,23 +1491,23 @@ const Core = (() => {
         if (!outbox.length) adopt(r.state, r.rev);
         continue;
       }
-      if (r.error === 'code') throw serverErr(r);
+      if (r.error === 'code' || r.error === 'session' || r.error === 'inactif' || r.error === 'pin_requis') throw serverErr(r);
       /* Le serveur a refusé le lot : on isole l'opération fautive pour ne pas bloquer les autres. */
-      let refused = 0;
+      let refused = 0, reason = r.error;
       for (const op of batch) {
         const one = await call('apply', { ops: [op] });
-        if (one.error === 'code') throw serverErr(one);
-        if (!one.ok) refused++;
+        if (one.error === 'code' || one.error === 'session' || one.error === 'inactif' || one.error === 'pin_requis') throw serverErr(one);
+        if (!one.ok) { refused++; reason = one.error; }
       }
       outbox.splice(0, batch.length); saveOutbox(); net.rev = null;
-      if (refused) toast(plural(refused, 'modification refusée', 'modifications refusées') + ' par le serveur : ' + r.error);
+      if (refused) toast(plural(refused, 'modification refusée', 'modifications refusées') + ' par le serveur : ' + errFr(reason));
     }
   }
 
   async function syncNow(force) {
     if (!API || !code) return;
     if (net.busy) { net.again = true; return; }
-    const viewKey = () => [net.loaded, net.version, net.pin, net.pinned.join(','), net.state === 'sync' ? 'ok' : net.state, net.error].join('|');
+    const viewKey = () => [net.loaded, net.version, net.pin, net.pinned.join(','), net.admins.join(','), net.me ? net.me.admin + ':' + net.me.fresh : '', net.state === 'sync' ? 'ok' : net.state, net.error].join('|');
     const view0 = viewKey();
     net.busy = true; net.state = 'sync'; paintNet();
     try {
@@ -1419,6 +1525,13 @@ const Core = (() => {
       if (e.server && e.code === 'code') {
         code = ''; try { localStorage.removeItem(CODE_KEY); } catch (x) { /* ignoré */ }
         net.state = 'locked'; paintNet(); askCode('Le code d’accès a changé ou n’est plus valable. Saisis le nouveau.');
+      } else if (e.server && (e.code === 'session' || e.code === 'pin_requis' || e.code === 'inactif')) {
+        if (e.code === 'inactif') {
+          outbox = []; saveOutbox(); net.rev = null; toast('Ton accès a été coupé par un administrateur du groupe.');
+        }
+        if (e.code !== 'pin_requis') { setToken(''); pinok = ''; lsDel(PINOK_KEY); }
+        net.state = 'pending';
+        if (e.code === 'pin_requis' && me && !openSh) askPin(me, 'Action d’administrateur : confirme ton code PIN. Il reste valable 4 heures.');
       } else if (e.server) { net.state = 'error'; net.error = e.message; } else net.state = 'offline';
     } finally {
       net.busy = false; paintNet();
