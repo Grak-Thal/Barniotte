@@ -235,6 +235,15 @@ input[type="text"] { width: 100%; border: 1px solid var(--line); background: var
 
 .welcome .steps { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
 
+/* Cartes repliables (Joueurs, Administration) */
+.fold > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 28px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary .sec-h { margin: 0; }
+.fold > summary::after { content: ''; flex: none; width: 8px; height: 8px; margin: 0 4px 3px 0; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+.fold[open] > summary::after { transform: rotate(-135deg); margin-bottom: 0; margin-top: 4px; }
+.fold[open] > summary { margin-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) { .fold > summary::after { transition: none; } }
+
 </style>
 
 </head>
@@ -396,7 +405,7 @@ const Core = (() => {
   const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
   const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
   const LATEST_SCRIPT = 5;             // dernière version du script serveur connue de cette appli
-  const APP_STAGE = 'bêta', APP_VERSION = '0.6';
+  const APP_STAGE = 'V', APP_VERSION = '1.0';
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
@@ -648,6 +657,15 @@ const Core = (() => {
   }
 
   /* ---------- Flux : modifier un match ---------- */
+  /* Carte repliable : titre + flèche, fermée par défaut. L'état ouvert/fermé survit aux redessins (synchro). */
+  const foldOpen = {};
+  function foldCard(key, title, ...children) {
+    const d = h('details', { class: 'card fold' }, h('summary', {}, h('span', { class: 'sec-h' }, title)), h('div', { class: 'stack' }, ...children));
+    if (foldOpen[key]) d.open = true;
+    d.addEventListener('toggle', () => { foldOpen[key] = d.open; });
+    return d;
+  }
+
   /* ---------- Carte administrateur ---------- */
   async function adminCall(action, extra, after) {
     try {
@@ -691,9 +709,10 @@ const Core = (() => {
         } }, 'Changer le code')));
   }
   function adminCard() {
-    const card = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Administration'));
-    if (!net.admins.length) card.append(h('p', { class: 'warn' }, 'Aucun administrateur n’est défini : tous les joueurs peuvent tout modifier. Pour changer cela, écris le nom du créateur dans le script (ADMINS), puis redéploie-le.'));
-    else card.append(h('p', { class: 'hint' }, 'Les administrateurs peuvent ouvrir et clôturer les saisons, gérer les joueurs, corriger les matchs terminés et changer le code d’accès. Ceux du script ne peuvent être retirés que depuis le script. Seul un joueur qui a déjà créé son code PIN peut être nommé. Si tu coupes l’accès d’un joueur (Inactif), pense à changer le code d’accès du groupe : il connaît encore l’ancien lien.'));
+    const card = foldCard('admin', 'Administration');
+    const inner = card.lastElementChild;
+    if (!net.admins.length) inner.append(h('p', { class: 'warn' }, 'Aucun administrateur n’est défini : tous les joueurs peuvent tout modifier. Pour changer cela, écris le nom du créateur dans le script (ADMINS), puis redéploie-le.'));
+    else inner.append(h('p', { class: 'hint' }, 'Les administrateurs peuvent ouvrir et clôturer les saisons, gérer les joueurs, corriger les matchs terminés et changer le code d’accès. Ceux du script ne peuvent être retirés que depuis le script. Seul un joueur qui a déjà créé son code PIN peut être nommé. Si tu coupes l’accès d’un joueur (Inactif), pense à changer le code d’accès du groupe : il connaît encore l’ancien lien.'));
     const list = h('div', { class: 'plist' });
     state.players.filter(p => p.active).forEach(p => {
       const isA = net.admins.includes(p.name);
@@ -715,7 +734,7 @@ const Core = (() => {
               h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'), go));
           } }, 'Code') : null)));
     });
-    card.append(list, h('button', { type: 'button', class: 'btn ghost', onclick: changeCodeFlow }, 'Changer le code d’accès du groupe'));
+    inner.append(list, h('button', { type: 'button', class: 'btn ghost', onclick: changeCodeFlow }, 'Changer le code d’accès du groupe'));
     return card;
   }
 
@@ -1241,7 +1260,8 @@ const Core = (() => {
   const isEmptyGroup = () => state.players.length === 0 && (!API || net.loaded);
   function welcomeCard() {
     const go = () => {
-      if (location.hash !== '#saison') location.hash = 'saison';
+      foldOpen.joueurs = true;
+      if (location.hash !== '#saison') location.hash = 'saison'; else render();
       setTimeout(() => { const i = document.getElementById('new-player'); if (i) { i.focus(); if (i.scrollIntoView) i.scrollIntoView({ block: 'center' }); } }, 120);
     };
     return h('div', { class: 'card stack welcome' },
@@ -1304,7 +1324,7 @@ const Core = (() => {
     } else out.append(newSeasonForm());
     if (adm && tokenMode()) out.append(adminCard());
 
-    const pl = h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Joueurs'),
+    const pl = foldCard('joueurs', 'Joueurs · ' + state.players.length,
       h('p', { class: 'hint' }, s && isInter(s) ? 'Un joueur ajouté pendant l’intersaison peut jouer tout de suite. Dans une saison classée, il joue à partir de la suivante.' : 'Un joueur ajouté joue à partir de la saison suivante, jamais en cours de saison.'));
     const list = h('div', { class: 'plist' });
     state.players.forEach(p => {
@@ -1330,7 +1350,7 @@ const Core = (() => {
       state.players.push({ name: n, active: true, c: Math.max(-1, ...state.players.map(q => (q.c == null ? -1 : q.c))) + 1 }); logEntry('Joueur ajouté : ' + n, null); commit(); toast(n + ' ajouté à la liste.');
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
-    pl.append(list, adm ? h('div', { class: 'row' }, h('div', { class: 'grow' }, input), h('button', { type: 'button', class: 'btn', onclick: add }, 'Ajouter')) : null);
+    pl.lastElementChild.append(list, adm ? h('div', { class: 'row' }, h('div', { class: 'grow' }, input), h('button', { type: 'button', class: 'btn', onclick: add }, 'Ajouter')) : null);
     out.append(pl);
 
     if (API && code) {
@@ -1384,7 +1404,7 @@ const Core = (() => {
     }
     out.append(lg);
 
-    out.append(h('p', { class: 'hint ver' }, 'Barniotte ' + APP_STAGE + ' ' + APP_VERSION + (API && net.version != null ? ' · script v' + net.version : '')));
+    out.append(h('p', { class: 'hint ver' }, 'Barniotte ' + APP_STAGE + APP_VERSION + (API && net.version != null ? ' · script v' + net.version : '')));
     if (!API) out.append(h('button', { type: 'button', class: 'btn ghost', onclick: () => {
       const sh = openSheet();
       sh.set(h('h2', {}, 'Réinitialiser la démo'), h('p', {}, 'Les données de cet appareil reviennent à l’import de ta fiche (73 matchs). Tes saisies de test seront perdues.'),
