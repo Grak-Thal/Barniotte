@@ -405,7 +405,7 @@ const Core = (() => {
   const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
   const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
   const LATEST_SCRIPT = 5;             // dernière version du script serveur connue de cette appli
-  const APP_STAGE = 'V', APP_VERSION = '1.0';
+  const APP_STAGE = 'V', APP_VERSION = '1.0.1';
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
@@ -620,7 +620,11 @@ const Core = (() => {
         info,
         h('div', { class: 'btns' },
           h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
-          h('button', { type: 'button', class: 'btn primary', disabled: !(A && B) || blocked, onclick: () => {
+          h('button', { type: 'button', class: 'btn primary', disabled: !(A && B) || blocked, onclick: ev => {
+            if (ev && ev.currentTarget) ev.currentTarget.disabled = true;   // un double appui ne crée pas deux matchs
+            /* S'il existe déjà un match non terminé de cette personne entre les mêmes joueurs dans cette saison, on le reprend au lieu d'en créer un second. */
+            const prev = state.matches.find(x => x.status === 'en_cours' && x.season === s.id && x.by === (me || '?') && ((x.a === A && x.b === B) || (x.a === B && x.b === A)));
+            if (prev) { scoreStep(prev, sh); return; }
             const m = { id: uid(), season: s.id, ts: nowIso(), a: A, b: B, sa: null, sb: null, status: 'en_cours', mods: [], by: me || '?' };
             state.matches.push(m); commit(); scoreStep(m, sh);
           } }, 'Démarrer le match')));
@@ -628,7 +632,10 @@ const Core = (() => {
     draw();
   }
 
+  /* Fenêtre de saisie d'un score en cours : tant qu'elle est ouverte, rien ne doit la remplacer (rappel « match non terminé » compris). */
+  let scoringSh = null;
   function scoreStep(m, sh) {
+    scoringSh = sh;
     let vals = [null, null], ok = false;
     const go = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: () => modsStep(m, vals[0], vals[1], sh) }, 'Valider le score');
     const picker = scorePicker(m.a, m.b, null, (a, b, valid) => { vals = [a, b]; ok = valid; go.disabled = !valid; });
@@ -642,6 +649,7 @@ const Core = (() => {
   }
 
   function modsStep(m, sa, sb, sh) {
+    scoringSh = sh;
     const w = sa > sb ? m.a : m.b;
     let sel = [];
     sh.set(
@@ -798,6 +806,7 @@ const Core = (() => {
   /* ---------- Match non terminé à l'ouverture ---------- */
   function checkPending() {
     if (!me) return;
+    if (scoringSh && openSh === scoringSh) return;   // un score est en train d'être saisi : on ne l'interrompt pas
     const m = state.matches.find(x => x.status === 'en_cours' && x.by === me);
     if (!m) return;
     const sh = openSheet(true);
