@@ -107,7 +107,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
   <div class="row"><button class="primary" id="copy-script" disabled>Copier le script avec mon code</button></div>
   <p id="copy-msg" class="hint" aria-live="polite"></p>
   <p class="hint">Le bouton se débloque dès que ton code est généré (étape 2). Le script contient déjà ton code.</p>
-  <details><summary>Voir le script (version 5)</summary>
+  <details><summary>Voir le script (version 6)</summary>
     <p class="hint">Rien de caché : tu peux le relire. Il lit et écrit uniquement dans ce Sheet (4 onglets : Joueurs, Saisons, Matchs, Journal) et ne contacte aucun autre service. Les codes PIN ne sont jamais enregistrés : seule une empreinte l’est, dans les propriétés du script.</p>
     <textarea id="script-view" readonly spellcheck="false"></textarea>
   </details>
@@ -216,7 +216,7 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);color:v
  */
 
 const CODE = '__CODE__';
-const SCRIPT_VERSION = 5;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
+const SCRIPT_VERSION = 6;   // numéro de version du script (l'appli signale aux groupes dont le script est plus ancien)
 const MAX_BODY = 400000;    // taille maximale d'une requête (caractères)
 
 /* Code PIN par joueur (option). Mettre true pour que chaque joueur crée un code à 6 chiffres la première fois qu'il choisit son nom.
@@ -238,7 +238,7 @@ const DELAI_MATCH_MIN = 10;   // l'auteur d'un match peut le corriger ou l'annul
 
 const TABS = {
   Joueurs: { cols: ['nom', 'actif', 'couleur'], text: [1, 2], widths: [120, 70, 80] },
-  Saisons: { cols: ['id', 'nom', 'debut', 'fin', 'statut', 'quota', 'joueurs'], text: [1, 2, 3, 4, 5, 7], widths: [50, 130, 100, 100, 90, 60, 280] },
+  Saisons: { cols: ['id', 'nom', 'debut', 'fin', 'statut', 'quota', 'joueurs', 'reponses'], text: [1, 2, 3, 4, 5, 7, 8], widths: [50, 130, 100, 100, 90, 60, 280, 220] },
   Matchs: { cols: ['id', 'saison', 'horodatage', 'joueur_a', 'joueur_b', 'score_a', 'score_b', 'statut', 'coups', 'saisi_par', 'modifie_le', 'termine_ms'], text: [1, 2, 3, 4, 5, 8, 9, 10, 11, 12], widths: [70, 60, 150, 90, 90, 70, 70, 90, 220, 90, 150, 110] },
   Journal: { cols: ['horodatage', 'par', 'match', 'texte'], text: [1, 2, 3, 4], widths: [150, 90, 70, 620] }
 };
@@ -338,6 +338,7 @@ function doPost(e) {
     if (req.action === 'pin_set') return out_(pinSet_(req.name, req.pin));
     if (req.action === 'pin_check') return out_(pinCheck_(req.name, req.pin));
     if (req.action === 'logout') return out_(deconnecter_(req.token));
+    if (req.action === 'inscrire') return out_(inscrire_(req.token, req.season, req.answer, req.name));
     if (req.action === 'admin_set') return out_(adminSet_(req.token, req.name, req.admin === true));
     if (req.action === 'pin_reset') return out_(pinReset_(req.token, req.name, req.pin));
     if (req.action === 'code_change') return out_(codeChange_(req.token, req.newcode));
@@ -372,10 +373,12 @@ function getRev_() {
 /* Mise à niveau d'un Sheet créé par une version plus ancienne du script (nouvelle colonne des matchs). Une seule fois. */
 function migrer_() {
   const p = PropertiesService.getScriptProperties();
-  if (p.getProperty('schema') === '5') return;
-  const sh = SpreadsheetApp.getActive().getSheetByName('Matchs');
-  if (sh) prepare_(sh, TABS.Matchs);
-  p.setProperty('schema', '5');
+  if (p.getProperty('schema') === '6') return;
+  ['Matchs', 'Saisons'].forEach(function (n) {
+    const sh = SpreadsheetApp.getActive().getSheetByName(n);
+    if (sh) prepare_(sh, TABS[n]);
+  });
+  p.setProperty('schema', '6');
 }
 
 function sync_(since, token) {
@@ -413,6 +416,15 @@ function readTab_(name) {
   return sh.getRange(2, 1, last - 1, TABS[name].cols.length).getValues();
 }
 
+/* Réponses à l'inscription d'une saison : { nom: 'oui' | 'non' }, gardées en texte JSON dans la colonne « reponses ». */
+function reponses_(v) {
+  try {
+    const o = JSON.parse(text_(v) || '{}'), out = {};
+    Object.keys(o).forEach(function (k) { if (o[k] === 'oui' || o[k] === 'non') out[k] = o[k]; });
+    return out;
+  } catch (e) { return {}; }
+}
+
 function readState_() {
   const players = readTab_('Joueurs').filter(function (r) { return text_(r[0]); }).map(function (r) {
     return { name: text_(r[0]), active: ['oui', 'true', '1'].indexOf(text_(r[1]).toLowerCase()) >= 0, c: num_(r[2]) == null ? 0 : num_(r[2]) };
@@ -420,7 +432,8 @@ function readState_() {
   const seasons = readTab_('Saisons').filter(function (r) { return text_(r[0]); }).map(function (r) {
     return {
       id: Number(text_(r[0])), name: text_(r[1]), start: day_(r[2]), end: day_(r[3]) || null, status: text_(r[4]),
-      quota: num_(r[5]) || 1, players: text_(r[6]).split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+      quota: num_(r[5]) || 1, players: text_(r[6]).split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+      rep: reponses_(r[7])
     };
   });
   const matches = readTab_('Matchs').filter(function (r) { return text_(r[0]); }).map(function (r) {
@@ -474,6 +487,7 @@ function checkOp_(op) {
     case 'season':
       if (!r || r.id == null || !r.name) return 'saison incomplète';
       if (!/^\d{1,6}$/.test(String(r.id)) || !txt_(r.name, 60) || !txt_(r.start, 10, true) || !txt_(r.end, 10, true) || !txt_(r.status, 20, true) || !liste_(r.players, 40, 40)) return 'texte invalide';
+      if (['en_cours', 'archivee', 'inter', 'archivee_inter', 'inscription'].indexOf(r.status || 'en_cours') < 0) return 'statut de saison invalide';
       if (r.quota != null && !(Number.isInteger(Number(r.quota)) && Number(r.quota) >= 1 && Number(r.quota) <= 500)) return 'quota invalide';
       return null;
     case 'player':
@@ -522,7 +536,27 @@ function norm_(s) {
 }
 function oui_(v) { return ['oui', 'true', '1'].indexOf(text_(v).toLowerCase()) >= 0; }
 
+/* Une seule saison classée à la fois (en cours ou en inscription), une seule intersaison ouverte, et pas d'inscription tant qu'une saison classée est en cours.
+   Ne vérifie que les statuts touchés par ce lot, pour ne pas bloquer un Sheet plus ancien. */
+function verifierSaisons_(ops) {
+  const touche = ops.some(function (o) { return o.t === 'season'; });
+  if (!touche) return;
+  const etat = {}, noms = {};
+  readTab_('Saisons').forEach(function (r) { if (text_(r[0])) { etat[text_(r[0])] = text_(r[4]); noms[text_(r[0])] = text_(r[1]); } });
+  // deux administrateurs qui créent une saison en même temps obtiendraient le même numéro : la seconde ne doit pas écraser la première
+  ops.forEach(function (o) { if (o.t === 'season' && noms[String(o.row.id)] !== undefined && noms[String(o.row.id)] !== o.row.name) throw new Error('Opération 1 : numéro de saison déjà utilisé'); });
+  const statutsTouches = {};
+  ops.forEach(function (o) {
+    if (o.t === 'season') { etat[String(o.row.id)] = o.row.status || 'en_cours'; statutsTouches[o.row.status || 'en_cours'] = true; }
+    else if (o.t === 'seasonDel') delete etat[String(o.id)];
+  });
+  const n = function (st) { return Object.keys(etat).filter(function (k) { return etat[k] === st; }).length; };
+  ['en_cours', 'inscription', 'inter'].forEach(function (st) { if (statutsTouches[st] && n(st) > 1) throw new Error('Opération 1 : il y a déjà une saison « ' + st + ' »'); });
+  if ((statutsTouches.en_cours || statutsTouches.inscription) && n('en_cours') && n('inscription')) throw new Error('Opération 1 : inscription_impossible');
+}
+
 function verifierOps_(ops) {
+  verifierSaisons_(ops);
   let noms = null, matchs = null, actifs = null;
   ops.forEach(function (op, i) {
     if (op.t === 'player') {
@@ -597,7 +631,10 @@ function applyOp_(op, now) {
   } else if (op.t === 'season') {
     const sh = sheet_('Saisons');
     const at = find_(sh, 1, r.id);
-    const row = [String(r.id), r.name, r.start || '', r.end || '', r.status || 'en_cours', Number(r.quota) || 1, (r.players || []).join(', ')];
+    // les réponses à l'inscription ne viennent jamais de l'appli : on garde celles qui sont déjà dans le Sheet
+    const avantS = at ? sh.getRange(at, 1, 1, TABS.Saisons.cols.length).getValues()[0] : null;
+    const rep = avantS && !(r.status === 'inscription' && text_(avantS[4]) !== 'inscription') ? text_(avantS[7]) : '';
+    const row = [String(r.id), r.name, r.start || '', r.end || '', r.status || 'en_cours', Number(r.quota) || 1, (r.players || []).join(', '), rep];
     if (at) put_(sh, 'Saisons', row, at); else append_(sh, 'Saisons', row);
   } else if (op.t === 'player') {
     const sh = sheet_('Joueurs');
@@ -756,11 +793,14 @@ function autoriser_(ops, c) {
           const st = saison ? text_(saison[4]) : '';
           if (st !== 'en_cours' && st !== 'inter') throw new Error('admin');
           [r.a, r.b].forEach(function (n) { if (!joueurs[n] || !oui_(joueurs[n][1])) throw new Error('admin'); });
+          if (st === 'en_cours' && text_(saison[6]).split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s === r.a || s === r.b; }).length < 2) throw new Error('admin');
         }
         return;
       }
       const statut = text_(ex[7]), auteur = text_(ex[9]);
       r.by = auteur;
+      // un joueur ordinaire ne déplace pas un match vers une autre saison et ne change pas les joueurs : il faut alors un administrateur
+      if (!c.admin && (String(r.season) !== text_(ex[1]) || r.a !== text_(ex[3]) || r.b !== text_(ex[4]))) { besoinAdmin = true; return; }
       if (statut === 'en_cours' && auteur === c.nom) return;
       if (statut === 'termine' && auteur === c.nom) {
         const fin = num_(ex[11]);
@@ -882,6 +922,30 @@ function adminSet_(token, nom, valeur) {
     PropertiesService.getScriptProperties().setProperty('admins', JSON.stringify(dyn));
     bumpRev_();
     return pinInfo_({ ok: true });
+  });
+}
+
+/* Un joueur répond à l'inscription d'une saison : « oui », « non », ou null pour effacer sa réponse. Il ne peut répondre que pour lui (le jeton fait foi). */
+function inscrire_(token, saison, reponse, nom) {
+  return avecVerrou_(function () {
+    migrer_();
+    const c = contexte_(token);
+    const qui = c ? c.nom : nom;
+    if (typeof qui !== 'string' || !qui) throw new Error('joueur');
+    const joueur = readTab_('Joueurs').filter(function (r) { return text_(r[0]) === qui; })[0];
+    if (!joueur || !oui_(joueur[1])) throw new Error('joueur');
+    if (reponse !== 'oui' && reponse !== 'non' && reponse !== null) throw new Error('reponse');
+    const sh = sheet_('Saisons');
+    const at = find_(sh, 1, String(saison));
+    if (!at) throw new Error('saison');
+    const ligne = sh.getRange(at, 1, 1, TABS.Saisons.cols.length).getValues()[0];
+    if (text_(ligne[4]) !== 'inscription') throw new Error('inscription_close');
+    const rep = reponses_(ligne[7]);
+    if (reponse === null) delete rep[qui]; else rep[qui] = reponse;
+    ligne[7] = JSON.stringify(rep);
+    put_(sh, 'Saisons', ligne, at);
+    const rev = bumpRev_();
+    return pinInfo_({ ok: true, rev: rev, version: SCRIPT_VERSION, now: Date.now() });
   });
 }
 

@@ -404,8 +404,8 @@ const Core = (() => {
   const CONFIG_API = (window.BARNIOTTE && window.BARNIOTTE.api) || '';
   const HOSTED = !!window.BARNIOTTE;   // faux dans la version de démonstration
   const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,200}\/exec$/;
-  const LATEST_SCRIPT = 5;             // dernière version du script serveur connue de cette appli
-  const APP_STAGE = 'V', APP_VERSION = '1.0.1';
+  const LATEST_SCRIPT = 6;             // dernière version du script serveur connue de cette appli
+  const APP_STAGE = 'V', APP_VERSION = '1.1';
   const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignoré */ } };
   const lsDel = k => { try { localStorage.removeItem(k); } catch (e) { /* ignoré */ } };
@@ -508,7 +508,13 @@ const Core = (() => {
      elle est repérée par son statut : « inter » (ouverte) et « archivee_inter » (terminée). */
   const isInter = s => !!s && (s.status === 'inter' || s.status === 'archivee_inter');
   const isArch = s => s.status === 'archivee' || s.status === 'archivee_inter';
-  const curSeason = () => state.seasons.find(s => s.status === 'en_cours' || s.status === 'inter') || null;
+  /* Trois sortes de saisons ouvertes : la saison classée (en_cours), l'inscription à la prochaine saison (inscription, sans match) et l'intersaison permanente des matchs amicaux (inter).
+     La saison classée et l'intersaison peuvent tourner en même temps ; on n'ouvre pas d'inscription tant que la saison classée n'est pas clôturée. */
+  const rankedSeason = () => state.seasons.find(s => s.status === 'en_cours') || null;
+  const friendlySeason = () => state.seasons.find(s => s.status === 'inter') || null;
+  const regSeason = () => state.seasons.find(s => s.status === 'inscription') || null;
+  const curSeason = () => rankedSeason() || friendlySeason();
+  const regOk = () => !API || net.version >= 6;
   /* Joueurs d'une saison. Intersaison ouverte : tous les joueurs actifs (un nouveau peut jouer tout de suite), plus ceux qui ont déjà joué. */
   function seasonPlayers(s) {
     if (!isInter(s)) return s.players;
@@ -597,12 +603,14 @@ const Core = (() => {
 
   /* ---------- Flux : nouveau match ---------- */
   function startMatch() {
-    const s = curSeason();
-    if (!s) { toast('Aucune saison ouverte. Ouvre-en une dans l’onglet Gestion.'); return; }
+    const rk = rankedSeason(), fy = friendlySeason(), rg = regSeason();
+    if (!rk && !fy) { toast(rg ? 'Les inscriptions à « ' + rg.name + ' » sont ouvertes : les matchs de saison commenceront à son lancement.' : 'Aucune saison ouverte. Ouvre-en une dans l’onglet Gestion.'); return; }
     const sh = openSheet();
+    let kind = rk ? 'saison' : 'amical';
     let A = null, B = null;
-    const players = seasonPlayers(s);
     const draw = () => {
+      const s = kind === 'saison' ? rk : fy;
+      const players = seasonPlayers(s).filter(n => { const p = state.players.find(x => x.name === n); return !p || p.active || isAdmin(); });
       let info = null, blocked = false;
       if (A && B && isInter(s)) {
         info = h('p', { class: 'hint' }, A + ' – ' + B + ' : ' + plural(pairCountAll(state, eff(s), A, B), 'match joué', 'matchs joués') + ' en intersaison.');
@@ -615,6 +623,7 @@ const Core = (() => {
       }
       sh.set(
         h('h2', {}, 'Nouveau match'),
+        rk && fy ? chips(['Match de saison', 'Match amical'], { selected: [kind === 'saison' ? 'Match de saison' : 'Match amical'], onChange: v => { if (!v[0]) return; kind = v[0] === 'Match de saison' ? 'saison' : 'amical'; A = null; B = null; draw(); } }) : null,
         h('div', {}, h('div', { class: 'lbl' }, 'Joueur 1'), chips(players, { selected: A ? [A] : [], disabled: B ? [B] : [], onChange: v => { A = v[0]; draw(); } })),
         h('div', {}, h('div', { class: 'lbl' }, 'Joueur 2'), chips(players, { selected: B ? [B] : [], disabled: A ? [A] : [], onChange: v => { B = v[0]; draw(); } })),
         info,
@@ -840,7 +849,7 @@ const Core = (() => {
   function identityDone(name) {
     pinok = name; lsSet(PINOK_KEY, name); setMe(name);
     if (openSh) openSh.close();
-    render(); checkPending();
+    render(); checkPending(); checkRegistration();
     if (pinOn()) setTimeout(() => syncNow(true), 50);
   }
   const pinField = (id, label) => {
@@ -988,7 +997,106 @@ const Core = (() => {
     return out;
   }
 
+  /* ---------- Inscription à une saison ---------- */
+  const askedReg = {};
+  function regStats(s) {
+    const act = state.players.filter(p => p.active).map(p => p.name), rep = s.rep || {};
+    return { oui: act.filter(n => rep[n] === 'oui'), non: act.filter(n => rep[n] === 'non'), att: act.filter(n => !rep[n]) };
+  }
+  /* Réponse d'un joueur : envoyée directement au serveur (le jeton dit qui répond), jamais par la file d'envoi. */
+  async function answerReg(s, answer) {
+    if (!me) { askWho(); return false; }
+    if (API) {
+      const r = await adminCall('inscrire', { season: s.id, answer, name: me });
+      if (!r) return false;
+    }
+    s.rep = Object.assign({}, s.rep || {});
+    if (answer) s.rep[me] = answer; else delete s.rep[me];
+    save(); render();
+    return true;
+  }
+  const regButtons = (s, after) => {
+    const mine = me && s.rep ? s.rep[me] : null;
+    return h('div', { class: 'btns' },
+      h('button', { type: 'button', class: 'btn primary', 'aria-pressed': mine === 'oui' ? 'true' : 'false', onclick: async () => { if (await answerReg(s, 'oui')) { toast('Inscrit·e à ' + s.name + '. À bientôt sur le terrain !'); if (after) after(); } } }, mine === 'oui' ? '✓ J’en suis !' : 'J’en suis !'),
+      h('button', { type: 'button', class: 'btn danger', 'aria-pressed': mine === 'non' ? 'true' : 'false', onclick: async () => { if (await answerReg(s, 'non')) { toast('Noté : tu es en cavale pour ' + s.name + '.'); if (after) after(); } } }, mine === 'non' ? '✓ Barnioteur·se en cavale !' : 'Barnioteur·se en cavale !'));
+  };
+  function askRegistration(s) {
+    const sh = openSheet();
+    sh.set(h('h2', {}, 'Ouverture de la saison « ' + s.name + ' »'),
+      h('p', {}, 'Une nouvelle saison se prépare. Participes-tu ? Tu peux changer d’avis tant que l’administrateur n’a pas lancé la saison.'),
+      regButtons(s, () => sh.close()),
+      h('div', { class: 'btns' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Plus tard')));
+  }
+  function checkRegistration() {
+    const s = regSeason();
+    if (!s || !me || openSh || askedReg[s.id] || (s.rep && s.rep[me])) return;
+    if (API && (!net.loaded || net.state === 'offline')) return;   // pas de question à partir de données qui peuvent être périmées
+    if (!state.players.some(p => p.name === me && p.active) || needsPin()) return;
+    askedReg[s.id] = true; askRegistration(s);
+  }
+  function regCard() {
+    const s = regSeason();
+    if (!s) return null;
+    const st = regStats(s);
+    return h('div', { class: 'card stack' },
+      h('h2', { class: 'sec-h' }, 'Inscriptions : ' + s.name),
+      h('p', {}, plural(st.oui.length, 'inscrit', 'inscrits') + (st.non.length ? ', ' + st.non.length + ' en cavale' : '') + (st.att.length ? ', ' + st.att.length + ' sans réponse' : '') + '.'),
+      st.oui.length ? h('p', { class: 'hint' }, 'Inscrits : ' + st.oui.join(', ') + '.') : null,
+      st.att.length ? h('p', { class: 'hint' }, 'Sans réponse : ' + st.att.join(', ') + '.') : null,
+      me ? regButtons(s) : null,
+      h('p', { class: 'hint' }, 'Les matchs de la saison commenceront quand un administrateur la lancera. En attendant, les matchs amicaux restent possibles.'));
+  }
+  /* Lancement : l'administrateur choisit les joueurs (par défaut les inscrits) et le nombre de matchs par duo ; la liste est ensuite figée. */
+  let regDraft = null;
+  function regAdminCard(s) {
+    const st = regStats(s), act = state.players.filter(p => p.active).map(p => p.name);
+    const d = regDraft && regDraft.id === s.id ? regDraft : null;
+    let touched = !!(d && d.touched), quota = d ? d.quota : 10;
+    let picked = d && touched ? d.picked.filter(n => act.includes(n)) : st.oui.slice();
+    const keep = () => { regDraft = { id: s.id, picked: picked.slice(), quota, touched }; };
+    keep();
+    const box = h('div', { class: 'card stack' });
+    const draw = () => {
+      keep();
+      box.replaceChildren(...[
+        h('h2', { class: 'sec-h' }, 'Inscriptions : ' + s.name),
+        h('p', { class: 'hint' }, plural(st.oui.length, 'inscrit', 'inscrits') + ', ' + st.non.length + ' en cavale, ' + st.att.length + ' sans réponse' + (st.att.length ? ' (' + st.att.join(', ') + ')' : '') + '.'),
+        h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs qui joueront la saison (coche ou décoche pour inscrire ou retirer quelqu’un à la main)'),
+          chips(act, { multi: true, selected: picked, onChange: v => { picked = v; touched = true; draw(); } })),
+        h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
+          h('div', { class: 'stepper' },
+            h('button', { type: 'button', 'aria-label': 'Moins', disabled: quota <= 1, onclick: () => { quota--; draw(); } }, '−'), h('output', {}, String(quota)),
+            h('button', { type: 'button', 'aria-label': 'Plus', disabled: quota >= 40, onclick: () => { quota++; draw(); } }, '+'))),
+        picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total. Une fois la saison lancée, la liste des joueurs est figée.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.'),
+        h('button', { type: 'button', class: 'btn primary', disabled: picked.length < 2, onclick: () => {
+          s.status = 'en_cours'; s.quota = quota; s.players = picked.slice().sort(fr);
+          s.start = nowIso().slice(0, 10);
+          regDraft = null;
+          logEntry(s.name + ' lancée : ' + s.players.join(', ') + ', ' + quota + ' matchs par duo', null);
+          commit(); toast(s.name + ' est lancée.'); location.hash = 'classement';
+        } }, 'Lancer la saison'),
+        delSeasonBtn(s)].filter(Boolean));
+    };
+    draw();
+    return box;
+  }
+
   function viewClassement() {
+    const out = h('div', { class: 'stack' });
+    const rg = regCard();
+    if (rg) out.append(rg);
+    out.append(viewClassementMain());
+    const rk = rankedSeason(), fi = friendlySeason();
+    if (rk && fi) {
+      const n = state.matches.filter(m => m.season === fi.id && m.status === 'termine').length;
+      out.append(h('div', { class: 'card row' }, h('span', {}, h('b', {}, 'Matchs amicaux'), ' : ' + plural(n, 'match joué', 'matchs joués') + '.'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => { matchScope = 'amical'; location.hash = 'matchs'; render(); } }, 'Voir')));
+    }
+    return out;
+  }
+  let matchScope = 'saison';
+  function viewClassementMain() {
     const s = curSeason();
     if (!s) {
       if (isEmptyGroup()) return h('div', { class: 'stack' }, welcomeCard());
@@ -996,7 +1104,7 @@ const Core = (() => {
       return h('div', { class: 'stack' }, h('div', { class: 'card stack' },
         h('h2', { class: 'sec-h' }, 'Pas de saison ouverte'),
         last ? h('p', {}, last.name + ' est archivée.') : null,
-        h('p', { class: 'hint' }, 'Ouvre une nouvelle saison pour enregistrer des matchs.'),
+        h('p', { class: 'hint' }, regSeason() ? 'Les inscriptions sont ouvertes : les matchs de la saison commenceront à son lancement.' : 'Ouvre une nouvelle saison pour enregistrer des matchs.'),
         h('button', { type: 'button', class: 'btn primary', onclick: () => { location.hash = 'saison'; } }, 'Ouvrir une saison')));
     }
     if (isInter(s)) return viewInter(s);
@@ -1066,8 +1174,10 @@ const Core = (() => {
 
   /* ---------- Onglet Matchs ---------- */
   function viewMatchs() {
-    const s = curSeason();
+    const rk = rankedSeason(), fi = friendlySeason();
+    const s = rk && fi ? (matchScope === 'amical' ? fi : rk) : curSeason();
     const out = h('div', { class: 'stack' });
+    if (rk && fi) out.append(chips(['Saison', 'Amicaux'], { selected: [matchScope === 'amical' ? 'Amicaux' : 'Saison'], onChange: v => { if (!v[0]) return; matchScope = v[0] === 'Amicaux' ? 'amical' : 'saison'; filter = 'Tous'; render(); } }));
     const names = ['Tous'].concat(s ? seasonPlayers(s) : []);
     out.append(chips(names, { selected: [filter], onChange: v => { filter = v[0]; render(); } }));
     const list = state.matches.filter(m => m.status !== 'annule' && (!s || m.season === s.id) && (filter === 'Tous' || m.a === filter || m.b === filter))
@@ -1179,7 +1289,7 @@ const Core = (() => {
   function endInter(s) {
     const sh = openSheet();
     sh.set(h('h2', {}, 'Terminer ' + s.name),
-      h('p', {}, 'L’intersaison passe en archive avec tous ses matchs. Tu pourras ensuite ouvrir une nouvelle saison.'),
+      h('p', {}, 'L’intersaison passe en archive avec tous ses matchs. Les matchs amicaux ne seront plus possibles tant que tu n’en rouvres pas une.'),
       h('p', { class: 'hint' }, 'Rien n’est supprimé. Il n’y a ni podium ni classement.'),
       h('div', { class: 'btns' },
         h('button', { type: 'button', class: 'btn ghost', onclick: () => sh.close() }, 'Annuler'),
@@ -1197,32 +1307,41 @@ const Core = (() => {
     const defName = k => (k === 'Intersaison' ? 'Intersaison' : 'Saison ' + nextSeasonId());
     const d = seasonDraft;
     let touched = !!(d && d.touched);
-    let kind = d ? d.kind : 'Saison', picked = d && touched ? d.picked.filter(n => act.includes(n)) : act.slice(), quota = d ? d.quota : 10;
+    let kind = d ? d.kind : (regOk() ? 'Saison' : 'Saison directe'), picked = d && touched ? d.picked.filter(n => act.includes(n)) : act.slice(), quota = d ? d.quota : 10;
     let name = d ? d.name : defName(kind);
     const keep = () => { seasonDraft = { kind, picked: picked.slice(), quota, name, touched }; };
     const box = h('div', { class: 'card stack' });
     const draw = () => {
       keep();
-      const inter = kind === 'Intersaison';
+      const inter = kind === 'Intersaison', direct = kind === 'Saison directe', reg = kind === 'Saison';
+      const kinds = (regOk() ? ['Saison'] : []).concat(['Saison directe']).concat(friendlySeason() ? [] : ['Intersaison']);
+      if (!kinds.includes(kind)) { kind = kinds[0]; name = defName(kind); }
       const nameIn = h('input', { type: 'text', id: 'ns-name', value: name, 'aria-label': inter ? 'Nom de l’intersaison' : 'Nom de la saison' });
       nameIn.addEventListener('input', () => { name = nameIn.value; keep(); });
       const bad = badText(name.trim(), 60);
       box.replaceChildren(...[
-        h('h2', { class: 'sec-h' }, inter ? 'Nouvelle intersaison' : 'Nouvelle saison'),
-        chips(['Saison', 'Intersaison'], { selected: [kind], onChange: v => { if (name === defName(kind)) name = defName(v[0]); kind = v[0]; draw(); } }),
+        h('h2', { class: 'sec-h' }, inter ? 'Nouvelle intersaison' : (reg ? 'Nouvelle saison : inscriptions' : 'Nouvelle saison')),
+        chips(kinds, { selected: [kind], onChange: v => { if (name === defName(kind)) name = defName(v[0]); kind = v[0]; draw(); } }),
         h('div', {}, h('div', { class: 'lbl hint' }, 'Nom'), nameIn),
-        inter ? null : h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs classés (une fois la saison lancée, plus d’ajout)'),
+        !direct ? null : h('div', {}, h('div', { class: 'lbl hint' }, 'Joueurs classés (une fois la saison lancée, plus d’ajout)'),
           chips(act, { multi: true, selected: picked, onChange: v => { picked = v; touched = true; draw(); } })),
-        inter ? null : h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
+        !direct ? null : h('div', { class: 'row' }, h('span', {}, 'Matchs par duo'),
           h('div', { class: 'stepper' },
             h('button', { type: 'button', 'aria-label': 'Moins', disabled: quota <= 1, onclick: () => { quota--; draw(); } }, '−'), h('output', {}, String(quota)),
             h('button', { type: 'button', 'aria-label': 'Plus', disabled: quota >= 40, onclick: () => { quota++; draw(); } }, '+'))),
         bad ? h('p', { class: 'hint err' }, 'Nom : ' + bad) : null,
         inter
-          ? h('p', { class: 'hint' }, 'Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison. Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement.')
+          ? h('p', { class: 'hint' }, 'Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison. Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement. L’intersaison reste ouverte en permanence, même pendant une saison classée : c’est là que vont les matchs amicaux.')
+          : reg
+          ? h('p', { class: 'hint' }, 'Chaque joueur verra « Ouverture de la saison » à sa prochaine connexion et répondra « J’en suis ! » ou « Barnioteur·se en cavale ! ». Tu lanceras ensuite la saison avec les inscrits et le nombre de matchs par duo. Pas de match de saison avant le lancement.')
           : (picked.length >= 2 ? h('p', { class: 'hint' }, plural(picked.length * (picked.length - 1) / 2 * quota, 'match', 'matchs') + ' à jouer au total.') : h('p', { class: 'hint err' }, 'Choisis au moins deux joueurs.')),
-        h('button', { type: 'button', class: 'btn primary', disabled: !name.trim() || !!bad || (inter ? act.length < 2 : picked.length < 2), onclick: () => {
+        h('button', { type: 'button', class: 'btn primary', disabled: !name.trim() || !!bad || (inter ? act.length < 2 : direct ? picked.length < 2 : false), onclick: () => {
           seasonDraft = null;
+          if (reg) {
+            const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'inscription', quota: 10, players: [], rep: {} };
+            state.seasons.push(s); logEntry('Inscriptions ouvertes : ' + s.name, null); commit(); toast('Inscriptions ouvertes pour ' + s.name + '.'); location.hash = 'classement';
+            return;
+          }
           if (inter) {
             const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'inter', quota: 1, players: act.slice().sort(fr) };
             state.seasons.push(s); logEntry(s.name + ' ouverte (sans classement)', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
@@ -1230,7 +1349,7 @@ const Core = (() => {
           }
           const s = { id: nextSeasonId(), name: name.trim(), start: nowIso().slice(0, 10), end: null, status: 'en_cours', quota, players: picked.slice().sort(fr) };
           state.seasons.push(s); logEntry(s.name + ' ouverte : ' + s.players.join(', ') + ', ' + quota + ' matchs par duo', null); commit(); toast(s.name + ' ouverte.'); location.hash = 'classement';
-        } }, inter ? 'Ouvrir l’intersaison' : 'Ouvrir la saison')].filter(Boolean));
+        } }, inter ? 'Ouvrir l’intersaison' : (reg ? 'Ouvrir les inscriptions' : 'Ouvrir la saison'))].filter(Boolean));
     };
     draw();
     return box;
@@ -1278,13 +1397,21 @@ const Core = (() => {
       h('p', {}, 'Ce groupe est vide. Pour démarrer :'),
       h('ol', { class: 'steps' },
         h('li', {}, h('b', {}, 'Ajoute les joueurs'), ' dans l’onglet Gestion, section Joueurs.'),
-        h('li', {}, h('b', {}, 'Ouvre une saison'), ' (ou une intersaison, sans classement) avec ces joueurs.'),
+        h('li', {}, h('b', {}, 'Ouvre une saison'), ' : les joueurs s’y inscrivent, puis tu la lances. Une intersaison (sans classement) sert aux matchs amicaux.'),
         h('li', {}, h('b', {}, 'Choisis ton nom'), ' quand l’appli le demande, puis enregistre le premier match avec le bouton +.')),
       tokenMode() && !token && net.admins.length
         ? h('div', { class: 'stack' },
           h('p', { class: 'hint' }, 'Les codes PIN sont activés : seul le créateur du groupe (' + net.admins.join(', ') + ') peut ajouter les joueurs. Commence par t’identifier.'),
           h('button', { type: 'button', class: 'btn primary', onclick: () => askWho() }, 'Je suis le créateur : créer mon code PIN'))
         : h('button', { type: 'button', class: 'btn primary', onclick: go }, 'Ajouter les joueurs'));
+  }
+
+  function friendlyCard(s) {
+    return h('div', { class: 'card stack' },
+        h('h2', { class: 'sec-h' }, 'Matchs amicaux · ' + s.name + ' · depuis le ' + fmtShort(s.start)),
+        h('p', { class: 'hint' }, 'Intersaison ouverte en permanence, sans classement : les matchs amicaux y sont gardés. Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté après coup.'),
+        h('button', { type: 'button', class: 'btn ghost', onclick: () => endInter(s) }, 'Terminer l’intersaison'),
+        delSeasonBtn(s));
   }
 
   function viewSaison() {
@@ -1303,19 +1430,16 @@ const Core = (() => {
       chips(state.players.filter(p => p.active).map(p => p.name), { selected: me ? [me] : [], onChange: v => { if (v[0] === me && !needsPin()) return; if (pinOn()) enterIdentity(v[0]); else { setMe(v[0]); render(); } } }),
       pinOn() ? h('p', { class: 'hint' }, 'Pour prendre l’identité d’un autre joueur, il faut son code PIN.') : null));
 
+    const rk = rankedSeason(), fy = friendlySeason(), rg = regSeason();
     const adm = isAdmin();
     if (!adm) {
       out.append(h('div', { class: 'card stack' },
-        h('h2', { class: 'sec-h' }, s ? s.name + ' · depuis le ' + fmtShort(s.start) : 'Aucune saison en cours'),
-        s ? h('p', { class: 'hint' }, isInter(s) ? 'Intersaison : les matchs ne comptent pour aucun classement.' : 'Quota : ' + s.quota + ' matchs par duo. Joueurs : ' + s.players.join(', ') + '.') : null,
+        h('h2', { class: 'sec-h' }, rk ? rk.name + ' · depuis le ' + fmtShort(rk.start) : (rg ? 'Inscriptions : ' + rg.name : 'Aucune saison classée en cours')),
+        rk ? h('p', { class: 'hint' }, 'Quota : ' + rk.quota + ' matchs par duo. Joueurs : ' + rk.players.join(', ') + '.') : null,
+        fy ? h('p', { class: 'hint' }, 'Matchs amicaux : ' + fy.name + ' est ouverte, sans classement.') : null,
         h('p', { class: 'hint' }, 'Ouvrir ou clôturer une saison, gérer les joueurs et le lien d’invitation est réservé aux administrateurs' + (net.admins.length ? ' (' + net.admins.join(', ') + ')' : '') + '.')));
-    } else if (s && isInter(s)) {
-      out.append(h('div', { class: 'card stack' },
-        h('h2', { class: 'sec-h' }, s.name + ' · depuis le ' + fmtShort(s.start)),
-        h('p', { class: 'hint' }, 'Les matchs sont gardés dans l’historique mais ne comptent pour aucun classement. Tous les joueurs actifs peuvent jouer, y compris un joueur ajouté pendant l’intersaison.'),
-        h('button', { type: 'button', class: 'btn', onclick: () => endInter(s) }, 'Terminer l’intersaison'),
-        delSeasonBtn(s)));
-    } else if (s) {
+    } else if (rk) {
+      const s = rk;
       const S = standings(state, s);
       const floor = maxPairCount(state, s);
       const setQuota = q => { logEntry('Matchs par duo : ' + s.quota + ' → ' + q, null); s.quota = q; commit(); };
@@ -1330,7 +1454,12 @@ const Core = (() => {
         h('p', { class: 'hint' }, S.played + ' / ' + S.total + ' matchs joués. Joueurs : ' + s.players.join(', ') + '.'),
         h('button', { type: 'button', class: 'btn', onclick: () => closeSeason(s) }, 'Clôturer la saison'),
         delSeasonBtn(s)));
+    } else if (rg) {
+      out.append(regAdminCard(rg));
     } else out.append(newSeasonForm());
+    if (fy) out.append(friendlyCard(fy));
+    else if (rk || rg) out.append(h('div', { class: 'card stack' }, h('h2', { class: 'sec-h' }, 'Matchs amicaux'), h('p', { class: 'hint' }, 'Aucune intersaison ouverte : les matchs amicaux sont impossibles. L’intersaison reste ouverte en permanence, sans classement, à côté de la saison classée.'),
+      h('button', { type: 'button', class: 'btn', onclick: () => { const s2 = { id: nextSeasonId(), name: 'Intersaison', start: nowIso().slice(0, 10), end: null, status: 'inter', quota: 1, players: state.players.filter(p => p.active).map(p => p.name).sort(fr) }; state.seasons.push(s2); logEntry('Intersaison ouverte (matchs amicaux)', null); commit(); toast('Intersaison ouverte.'); } }, 'Ouvrir l’intersaison')));
     if (adm && tokenMode()) out.append(adminCard());
 
     const pl = foldCard('joueurs', 'Joueurs · ' + state.players.length,
@@ -1442,8 +1571,8 @@ const Core = (() => {
   const isAdmin = () => !tokenMode() || !net.me || !!net.me.admin;
   const serverNow = () => Date.now() + (net.skew || 0);
   const DELAI_MATCH_MS = 10 * 60000;
-  const ERR_FR = { admin: 'réservé aux administrateurs', delai: 'le délai de 10 minutes est dépassé', session: 'session expirée', inactif: 'accès coupé', pin_requis: 'PIN à confirmer', dernier_admin: 'il doit rester au moins un administrateur actif', admin_fixe: 'cet administrateur est défini dans le script', joueur_sans_pin: 'ce joueur doit d’abord créer son code PIN', pin_format: 'le code doit faire 6 chiffres, pas trop évidents', joueur: 'joueur introuvable', code_invalide: 'code invalide (16 à 60 caractères : lettres, chiffres, - et _)' };
-  const errFr = e => ERR_FR[e] || e || 'erreur';
+  const ERR_FR = { admin: 'réservé aux administrateurs', delai: 'le délai de 10 minutes est dépassé', session: 'session expirée', inactif: 'accès coupé', pin_requis: 'PIN à confirmer', dernier_admin: 'il doit rester au moins un administrateur actif', admin_fixe: 'cet administrateur est défini dans le script', joueur_sans_pin: 'ce joueur doit d’abord créer son code PIN', pin_format: 'le code doit faire 6 chiffres, pas trop évidents', inscription_impossible: 'on n’ouvre pas d’inscription tant que la saison en cours n’est pas clôturée', inscription_close: 'les inscriptions de cette saison sont closes', saison: 'saison introuvable', reponse: 'réponse invalide', joueur: 'joueur introuvable', code_invalide: 'code invalide (16 à 60 caractères : lettres, chiffres, - et _)' };
+  const errFr = e => ERR_FR[e] || ERR_FR[String(e || '').replace(/^Opération \d+ : /, '')] || String(e || 'erreur').replace(/^Opération \d+ : /, '');
   try { const pi = JSON.parse(lsGet(PININFO_KEY) || 'null'); if (pi) { net.pin = !!pi.on; net.pinned = Array.isArray(pi.names) ? pi.names.filter(n => typeof n === 'string') : []; } } catch (e) { /* ignoré */ }
   const savePinInfo = () => lsSet(PININFO_KEY, JSON.stringify({ on: net.pin, names: net.pinned }));
   let snap = null;
@@ -1529,7 +1658,7 @@ const Core = (() => {
   const serverErr = r => { const e = new Error(r.error || 'erreur'); e.server = true; e.code = r.error; return e; };
 
   /* Un vrai refus du serveur (droits, validation) : l'opération est abandonnée. Toute autre erreur (verrou occupé, panne) : on garde la file et on réessaiera. */
-  const isRefusal = e => /^(Opération \d|admin$|delai$|dernier_admin$)/.test(String(e || ''));
+  const isRefusal = e => /^(Opération \d|admin$|delai$|dernier_admin$|inscription_impossible$)/.test(String(e || ''));
   async function flush() {
     while (outbox.length) {
       const batch = outbox.slice(0, 100);
@@ -1585,6 +1714,7 @@ const Core = (() => {
       net.busy = false; paintNet();
       if (view0 !== viewKey()) render();
       if (readyDone && net.loaded && needsPin() && !openSh) enterIdentity(me);
+      else if (readyDone && net.loaded) checkRegistration();
       if (net.again) { net.again = false; setTimeout(() => syncNow(false), 200); }
     }
   }
@@ -1806,6 +1936,7 @@ const Core = (() => {
     readyDone = true;
     if (!state.players.length) return;
     identityGate();
+    checkRegistration();
   }
 
   function startPolling() {
@@ -1824,7 +1955,8 @@ const Core = (() => {
   function render() {
     const tab = currentTab(), s = curSeason();
     document.querySelectorAll('.tab').forEach(b => { if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    document.getElementById('season-label').textContent = s ? s.name + ' · depuis le ' + fmtShort(s.start) : 'Aucune saison ouverte';
+    const rgl = regSeason();
+    document.getElementById('season-label').textContent = !rankedSeason() && rgl ? 'Inscriptions : ' + rgl.name : (s ? s.name + ' · depuis le ' + fmtShort(s.start) : 'Aucune saison ouverte');
     const who = document.getElementById('who');
     who.replaceChildren('Je suis ', h('b', {}, me || '?'));
     paintNet();
